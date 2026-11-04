@@ -39,6 +39,9 @@ Ajustes porque o repositório é público (ver `decisoes.md`).
 - [x] Regra da `main` (Settings › Rules › Rulesets › "Proteger a main"): só por pull request, com "Documentos de IA" e "Código" verdes, sem push forçado, sem apagar, sem exceção para admin — _resp.: Guilherme, 04/11/2026_
 - [x] Actions: workflows de pull request de qualquer colaborador externo só rodam com aprovação — _resp.: Guilherme, 04/11/2026_
 - [x] Segurança: secret scanning com push protection, alertas do Dependabot e private vulnerability reporting ligados — _resp.: Guilherme, 04/11/2026_
+- [x] CodeQL (varredura de segurança do Python e dos workflows), Dependabot abrindo pull request de correção, regra "Proteger as versões" (tags `v*` não são apagadas nem reescritas), tópicos do repositório, Wiki e Projects desligados — _resp.: Guilherme, 04/11/2026_
+- [ ] `SECURITY.md`, `CONTRIBUTING.md` e revisão de dependências no pull request — numa issue própria — _resp.: Guilherme_
+- [ ] Ao criar a atualização automática (workflow agendado): em repositório público, o GitHub pausa o agendamento depois de 60 dias sem atividade no repositório; prever como manter ativo e um aviso se parar — _resp.: Guilherme_
 - [x] Regras de dado público, neutralidade e logs públicos no `CLAUDE.md` e no `_referencias/LEIA-ME.md` — _resp.: Guilherme, 04/11/2026_
 - [x] `LICENSE` MIT (titular: Guilherme Lobo de Carvalho) e seção "Fonte dos dados" no `README.md` — _resp.: Guilherme, 04/11/2026_
 - [ ] Conferir no Data.Rio a licença dos dados do 1746 e trocar o "a definir" do `README.md` — _resp.: Guilherme_
