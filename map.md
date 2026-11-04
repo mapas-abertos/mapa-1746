@@ -1,4 +1,4 @@
-# Mapa do repositório — a definir
+# Mapa do repositório — Mapa 1746
 
 > Índice de tudo que existe aqui. Arquivo ou pasta novo entra aqui; o CI confere nos dois sentidos.
 >
@@ -8,7 +8,8 @@
 
 | Arquivo | Responde | Quando ler |
 |---|---|---|
-| `README.md` | O que é este repositório e como começar? | Primeira visita, no GitHub |
+| `README.md` | O que é este repositório, de onde vêm os dados e como começar? | Primeira visita, no GitHub |
+| `LICENSE` | Licença MIT do código | Antes de reaproveitar o código |
 | `CLAUDE.md` | O que vale sempre? | Toda sessão |
 | `AGENTS.md` | Ponteiro para o `CLAUDE.md` (lido pelo Codex) | Não editar |
 | `memory.md` | Como o responsável trabalha? Onde já erramos? | Antes de qualquer tarefa |

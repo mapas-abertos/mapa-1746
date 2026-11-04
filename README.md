@@ -1,8 +1,18 @@
-# Nome do projeto — a definir
+# Mapa 1746
 
-O que este repositório resolve: a definir.
+Mapa público dos chamados do 1746 do Rio de Janeiro, com totais por rua ou por quadrado de ~100 m, feito a partir dos dados abertos da Prefeitura. Método e fonte abertos, com atualização automática pelo GitHub Actions.
 
 Feito a partir do modelo P3 da mentoria de IA da LOBO DE CARVALHO SOLUCOES LTDA. O código é escrito pelo Claude Code; o responsável descreve o que quer, aprova o teste e confere o resultado.
+
+## Fonte dos dados
+
+- Chamados do 1746 da Prefeitura do Rio de Janeiro, publicados no Data.Rio e lidos na tabela `datario.administracao_servicos_publicos.chamado_1746` do BigQuery.
+- Licença dos dados de origem: a definir (será conferida na fonte).
+- O mapa mostra só totais agregados por rua ou por quadrado de ~100 m. Chamado individual, coordenada exata e dado de pessoas não entram neste repositório.
+
+## Licença
+
+O código está sob a licença MIT (ver `LICENSE`). Os dados seguem a licença da fonte.
 
 ## Como começar
 
