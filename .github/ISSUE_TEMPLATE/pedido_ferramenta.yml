@@ -1,0 +1,56 @@
+name: Pedido de ferramenta
+description: Uma ferramenta nova, ou uma mudança numa que já existe.
+title: "[Pedido] "
+labels: ["pedido"]
+body:
+  - type: markdown
+    attributes:
+      value: |
+        Escreva como explicaria a um colega. O Claude transforma este pedido em teste e em código.
+        Não cole senha, chave nem dado real de cliente aqui: use um exemplo fictício.
+
+  - type: textarea
+    id: o_que_faz
+    attributes:
+      label: O que a ferramenta faz?
+      description: Em uma ou duas frases. O que entra e o que sai.
+      placeholder: "Ex.: lê a planilha de medição do mês e gera o resumo por obra."
+    validations:
+      required: true
+
+  - type: textarea
+    id: onde_entra
+    attributes:
+      label: Onde ela entra no seu trabalho?
+      description: Em que processo ou etapa, quem usa e com que frequência.
+      placeholder: "Ex.: fechamento da medição, todo dia 25, eu e a coordenação."
+    validations:
+      required: true
+
+  - type: textarea
+    id: quando_pronta
+    attributes:
+      label: Quando ela está pronta?
+      description: O que você vai conferir para aprovar. Cada item vira um teste automático e entra no teste manual do pull request.
+      placeholder: |
+        - Com a planilha de exemplo, o resumo mostra as 3 obras e o total bate.
+        - Com uma planilha sem a coluna de valor, avisa qual coluna falta.
+    validations:
+      required: true
+
+  - type: textarea
+    id: exemplo
+    attributes:
+      label: Exemplo de entrada e saída (fictício)
+      description: Opcional. Um exemplo pequeno ajuda o Claude a acertar de primeira. Originais que explicam de onde veio o pedido vão para _referencias/.
+
+  - type: dropdown
+    id: dado_sensivel
+    attributes:
+      label: A ferramenta mexe com dado sensível (cliente, pessoas, valores)?
+      options:
+        - Não
+        - Sim
+        - Não sei
+    validations:
+      required: true

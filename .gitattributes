@@ -1,0 +1,7 @@
+# Fim de linha igual em todo computador (Windows, Mac) e no GitHub: LF.
+# Evita diferenças falsas e conflitos só por causa do fim de linha.
+* text=auto eol=lf
+
+# Scripts do Windows precisam de CRLF.
+*.bat text eol=crlf
+*.cmd text eol=crlf

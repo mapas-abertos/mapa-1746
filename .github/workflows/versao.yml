@@ -1,0 +1,68 @@
+# Versão: depois de um merge na main, se o CI passou, cria a tag da versão e o Release.
+# A versão é a data do merge: v2026.11.04 (e v2026.11.04.2 se houver outra no mesmo dia).
+# Em seguida chama o deploy.yml, que é onde o CD vai entrar.
+#
+# Por que esperar o CI: no GitHub Free o merge não é barrado; assim, pelo menos,
+# versão e deploy só saem com o CI verde.
+
+name: Versão
+
+on:
+  workflow_run:
+    workflows: [CI]
+    types: [completed]
+    branches: [main]
+
+# Uma versão de cada vez, para dois merges seguidos não gerarem a mesma tag.
+concurrency: versao
+
+jobs:
+  versao:
+    name: Criar versão
+    # Só quando o CI passou numa mudança da main (não num pull request).
+    if: github.event.workflow_run.conclusion == 'success' && github.event.workflow_run.event == 'push'
+    runs-on: ubuntu-latest
+    permissions:
+      contents: write # criar a tag e o Release
+      pull-requests: read # ler o título do pull request
+    outputs:
+      tag: ${{ steps.tag.outputs.tag }}
+    env:
+      GH_TOKEN: ${{ github.token }}
+      COMMIT: ${{ github.event.workflow_run.head_sha }}
+      # Fuso usado para a data da versão.
+      TZ: America/Sao_Paulo
+    steps:
+      - uses: actions/checkout@v5
+        with:
+          fetch-depth: 0 # traz as tags que já existem
+
+      - name: Escolher o nome da versão
+        id: tag
+        run: |
+          DATA=$(date +%Y.%m.%d)
+          TAG="v$DATA"
+          N=1
+          while git rev-parse -q --verify "refs/tags/$TAG" > /dev/null; do
+            N=$((N + 1))
+            TAG="v$DATA.$N"
+          done
+          echo "tag=$TAG" >> "$GITHUB_OUTPUT"
+          echo "Versão: $TAG"
+
+      - name: Criar a tag e o Release
+        env:
+          TAG: ${{ steps.tag.outputs.tag }}
+        run: |
+          # Título do Release = título do pull request que entrou (ou a mensagem do commit).
+          TITULO=$(gh api "repos/$GITHUB_REPOSITORY/commits/$COMMIT/pulls" --jq '.[0].title // empty' || true)
+          if [ -z "$TITULO" ]; then TITULO=$(git log -1 --format=%s "$COMMIT"); fi
+          gh release create "$TAG" --target "$COMMIT" --title "$TAG - $TITULO" --generate-notes
+
+  deploy:
+    name: Entregar a versão
+    needs: versao
+    uses: ./.github/workflows/deploy.yml
+    with:
+      versao: ${{ needs.versao.outputs.tag }}
+    secrets: inherit

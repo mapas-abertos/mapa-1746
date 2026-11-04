@@ -1,0 +1,43 @@
+# Conferência automática (CI): roda a cada pull request e a cada mudança na main.
+# As mesmas verificações rodam no seu computador com: python verificacoes/verificar_tudo.py
+# No GitHub Free, com repositório privado, o GitHub não impede o merge com o CI vermelho.
+# Quem impede é a regra do CLAUDE.md: merge só com o CI verde.
+
+name: CI
+
+on:
+  pull_request:
+  push:
+    branches: [main]
+
+permissions:
+  contents: read
+
+jobs:
+  documentos:
+    name: Documentos de IA
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v5
+      - uses: actions/setup-python@v6
+        with:
+          python-version: "3.12"
+      - name: Conferir CLAUDE.md, memory.md, historico.md, checklist, mapa e LEIA-ME
+        run: python verificacoes/documentos_ia.py
+
+  codigo:
+    name: Código
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v5
+      - uses: actions/setup-python@v6
+        with:
+          python-version: "3.12"
+      - name: Barrar segredos e arquivos proibidos
+        run: python verificacoes/segredos.py
+      - name: Instalar as bibliotecas das ferramentas e as de verificação
+        run: pip install -r requirements.txt -r requirements-dev.txt
+      - name: Lint do Python
+        run: python verificacoes/rodar_lint.py
+      - name: Testes automáticos
+        run: python verificacoes/rodar_testes.py

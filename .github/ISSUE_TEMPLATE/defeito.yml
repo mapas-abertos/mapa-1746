@@ -1,0 +1,49 @@
+name: Defeito numa ferramenta
+description: Uma ferramenta que já existe fez algo errado.
+title: "[Defeito] "
+labels: ["defeito"]
+body:
+  - type: markdown
+    attributes:
+      value: |
+        Para o que já funcionava e deixou de funcionar, ou nunca funcionou direito.
+        Travou em outra coisa (instalação, Git, conta)? Use "Suporte do mentor".
+        Não cole senha, chave nem dado real de cliente aqui: use um exemplo fictício.
+
+  - type: input
+    id: ferramenta
+    attributes:
+      label: Qual ferramenta?
+      description: O nome do botão ou do arquivo, ou o número da issue que pediu a ferramenta.
+    validations:
+      required: true
+
+  - type: textarea
+    id: passos
+    attributes:
+      label: O que você fez?
+      description: Os passos, na ordem, até o erro aparecer.
+    validations:
+      required: true
+
+  - type: textarea
+    id: esperava
+    attributes:
+      label: O que deveria acontecer?
+      description: Vira o teste automático que prova a correção.
+    validations:
+      required: true
+
+  - type: textarea
+    id: aconteceu
+    attributes:
+      label: O que aconteceu?
+      description: Mensagem de erro, print ou o resultado errado.
+    validations:
+      required: true
+
+  - type: input
+    id: versao
+    attributes:
+      label: Versão em uso (se souber)
+      description: "Ex.: v2026.11.04. Está na página Releases do repositório."

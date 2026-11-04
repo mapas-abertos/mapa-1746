@@ -1,0 +1,41 @@
+name: Suporte do mentor
+description: Travou em algo? Abra esta issue e o mentor é avisado.
+title: "[Suporte] "
+labels: ["suporte"]
+# Usuário do mentor no GitHub. Ele recebe a issue enquanto for membro da organização
+# (ver docs/como_usar_este_modelo.md, passo 1).
+assignees: ["guilobocarvalho"]
+body:
+  - type: markdown
+    attributes:
+      value: |
+        O mentor responde em até 24 horas, contadas em dias úteis.
+        Não cole senha, chave nem dado real de cliente aqui.
+
+  - type: textarea
+    id: fazendo
+    attributes:
+      label: O que você estava fazendo?
+      description: Qual ferramenta ou issue, e em que passo.
+    validations:
+      required: true
+
+  - type: textarea
+    id: esperava
+    attributes:
+      label: O que você esperava que acontecesse?
+    validations:
+      required: true
+
+  - type: textarea
+    id: aconteceu
+    attributes:
+      label: O que aconteceu?
+      description: Cole a mensagem de erro ou um print. Link do pull request ou da execução do CI, se houver.
+    validations:
+      required: true
+
+  - type: textarea
+    id: tentou
+    attributes:
+      label: O que você e o Claude já tentaram?

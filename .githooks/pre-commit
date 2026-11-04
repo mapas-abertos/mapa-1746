@@ -1,0 +1,14 @@
+#!/bin/sh
+# Barreira local: antes de cada commit, confere segredos e arquivos proibidos
+# no seu computador, antes de qualquer coisa ir para o GitHub.
+# Ligada uma vez por repositório com: git config core.hooksPath .githooks
+# Não pule esta barreira (git commit --no-verify).
+
+PY=python
+command -v "$PY" > /dev/null 2>&1 || PY=python3
+
+if ! "$PY" verificacoes/segredos.py; then
+  echo
+  echo "Commit barrado pela barreira local. Corrija o que está acima e faça o commit de novo."
+  exit 1
+fi

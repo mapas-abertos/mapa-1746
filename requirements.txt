@@ -1,0 +1,3 @@
+# Bibliotecas que as ferramentas de src/ usam, com a versão fixa (ex.: openpyxl==3.1.5).
+# Biblioteca nova: o Claude acrescenta aqui no mesmo pull request da ferramenta.
+# Instalar (com a .venv ativa): pip install -r requirements.txt

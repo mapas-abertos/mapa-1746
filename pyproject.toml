@@ -1,0 +1,16 @@
+# Configuração das ferramentas de verificação. Não é preciso mexer aqui no dia a dia.
+
+[tool.ruff]
+# Versão do Python usada no GitHub (ver .github/workflows/ci.yml).
+target-version = "py312"
+
+[tool.ruff.lint]
+# Erros reais (F) e estilo básico (E4, E7, E9). A lista fica escrita aqui para não mudar
+# sozinha quando o ruff for atualizado.
+select = ["E4", "E7", "E9", "F"]
+
+[tool.pytest.ini_options]
+# Onde ficam os testes: os das ferramentas e os das próprias verificações.
+testpaths = ["testes", "verificacoes/testes"]
+# Onde o Python procura o código que os testes usam.
+pythonpath = ["src", "verificacoes"]

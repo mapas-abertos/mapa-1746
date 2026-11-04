@@ -1,0 +1,26 @@
+# O que nunca vai para o GitHub. A barreira do CI (verificacoes/segredos.py) confere de novo.
+
+# Segredos: o .env fica só no seu computador. O .env.example (sem valores) vai.
+.env
+.env.*
+!.env.example
+
+# Dados que não podem ir para o GitHub (ver _referencias/LEIA-ME.md)
+dados/
+
+# Arquivos que o Python e as ferramentas criam sozinhos
+__pycache__/
+*.pyc
+.venv/
+venv/
+.pytest_cache/
+.ruff_cache/
+*.log
+
+# Arquivos do sistema e de programas abertos
+.DS_Store
+Thumbs.db
+desktop.ini
+~$*
+.vscode/
+.idea/
