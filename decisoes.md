@@ -4,6 +4,8 @@
 >
 > Formato: **Decisão em uma frase — DD/MM/AAAA.** O que motivou, opções consideradas e por que esta. Quem decidiu. Se revoga uma anterior, diga qual.
 
+- **A revisão de dependências é obrigatória para o merge — 04/11/2026.** A regra "Proteger a main" passa a exigir o check "Revisão de dependências", além de "Documentos de IA" e "Código". Assim, nenhum pull request (inclusive os do Dependabot e os de quem é de fora) traz biblioteca ou action com vulnerabilidade alta ou crítica, ou com licença GPL, AGPL ou SSPL. A alternativa, deixar o check só como aviso, dependia de alguém ler o resultado. Decidiu: Guilherme.
+
 - **Credencial do BigQuery (só leitura) num environment restrito à `main`, e não num Secret solto — 04/11/2026.** Em repositório público, o GitHub Free oferece environments: só um workflow rodando na `main` lê a credencial, e um pull request vindo de fork não. Ainda não foi criada; entra quando a primeira ferramenta de coleta precisar. Decidiu: Guilherme.
 
 - **Deploy no GitHub Pages, só depois do OK do advogado — 04/11/2026.** O Pages é grátis em repositório público e serve um site estático, que basta para o mapa. Antes de publicar, uma consulta jurídica confere a licença dos dados, o risco de identificar pessoas e o texto da página de método. Até lá, o `deploy.yml` fica como veio do modelo. Decidiu: Guilherme.
