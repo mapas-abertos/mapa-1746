@@ -1,0 +1,26 @@
+# Revisão de dependências: roda a cada pull request.
+# Confere as bibliotecas e actions que o pull request acrescenta ou muda. Falha se alguma
+# tiver vulnerabilidade de gravidade alta ou crítica, ou licença que não combina com a MIT
+# do código para distribuir (GPL, AGPL, SSPL). Licenças permissivas comuns passam.
+# Não é exigido pela regra da main ("Proteger a main"): se passar a ser, atualize a regra
+# e o comentário do ci.yml. Ao renomear o job, atualize a regra.
+# Os logs são públicos: nunca imprima segredo nem dado bruto.
+
+name: Dependências
+
+on:
+  pull_request:
+
+permissions:
+  contents: read
+
+jobs:
+  revisao:
+    name: Revisão de dependências
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v5
+      - uses: actions/dependency-review-action@v4
+        with:
+          fail-on-severity: high
+          deny-licenses: GPL-2.0-only, GPL-2.0-or-later, GPL-3.0-only, GPL-3.0-or-later, AGPL-3.0-only, AGPL-3.0-or-later, SSPL-1.0

@@ -10,6 +10,8 @@
 |---|---|---|
 | `README.md` | O que é este repositório, de onde vêm os dados e como começar? | Primeira visita, no GitHub |
 | `LICENSE` | Licença MIT do código | Antes de reaproveitar o código |
+| `SECURITY.md` | Como relatar uma falha de segurança em particular? | Ao achar uma falha |
+| `CONTRIBUTING.md` | Como sugerir algo ou apontar erro no mapa, e que regras valem para quem é de fora? | Antes de abrir issue ou pull request |
 | `CLAUDE.md` | O que vale sempre? | Toda sessão |
 | `AGENTS.md` | Ponteiro para o `CLAUDE.md` (lido pelo Codex) | Não editar |
 | `memory.md` | Como o responsável trabalha? Onde já erramos? | Antes de qualquer tarefa |
@@ -65,6 +67,7 @@ Cada pasta tem um `LEIA-ME.md` com as regras dela (menos as que começam com pon
 - `.github/workflows/ci.yml` — CI: documentos de IA e código, a cada pull request e na `main`.
 - `.github/workflows/versao.yml` — depois do CI verde na `main`, cria a tag com a data e o Release e chama o deploy.
 - `.github/workflows/deploy.yml` — ponto de encaixe do CD; destino a definir.
+- `.github/workflows/dependencias.yml` — revisão de dependências a cada pull request: barra vulnerabilidade alta ou crítica e licença incompatível com a MIT.
 - `.github/workflows/etiquetas.yml` — cria as etiquetas das issues e apaga as padrão; rodar à mão, uma vez.
 - `.github/ISSUE_TEMPLATE/pedido_ferramenta.yml` — formulário "Pedido de ferramenta": o que faz, onde entra, quando está pronta.
 - `.github/ISSUE_TEMPLATE/defeito.yml` — formulário "Defeito numa ferramenta": o que fez, o que deveria acontecer, o que aconteceu.
