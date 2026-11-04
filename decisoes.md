@@ -1,8 +1,20 @@
-# Decisões — a definir
+# Decisões — Mapa 1746
 
 > O **porquê** das escolhas do projeto. O que foi feito fica no `historico.md`; o andamento, no `Checklist_Projeto.md`. Decisão nova entra no topo.
 >
 > Formato: **Decisão em uma frase — DD/MM/AAAA.** O que motivou, opções consideradas e por que esta. Quem decidiu. Se revoga uma anterior, diga qual.
+
+- **Credencial do BigQuery (só leitura) num environment restrito à `main`, e não num Secret solto — 04/11/2026.** Em repositório público, o GitHub Free oferece environments: só um workflow rodando na `main` lê a credencial, e um pull request vindo de fork não. Ainda não foi criada; entra quando a primeira ferramenta de coleta precisar. Decidiu: Guilherme.
+
+- **Deploy no GitHub Pages, só depois do OK do advogado — 04/11/2026.** O Pages é grátis em repositório público e serve um site estático, que basta para o mapa. Antes de publicar, uma consulta jurídica confere a licença dos dados, o risco de identificar pessoas e o texto da página de método. Até lá, o `deploy.yml` fica como veio do modelo. Decidiu: Guilherme.
+
+- **Segurança de repositório público: aprovação para workflows de pull requests externos, secret scanning com push protection, Dependabot e private vulnerability reporting — 04/11/2026.** Qualquer pessoa pode abrir pull request: sem aprovação, o workflow dela rodaria sozinho no nosso Actions. O push protection barra segredo no próprio GitHub, além da barreira local e do CI; vulnerabilidade é relatada em particular, e não numa issue pública. Também ligados, por serem grátis em repositório público: CodeQL, pull request de correção do Dependabot e a regra "Proteger as versões" (uma versão publicada não é apagada nem reescrita). Wiki e Projects desligados: não são usados, e a Wiki ficaria fora do CI e da revisão. Squash merge não foi imposto: o histórico atual basta. Decidiu: Guilherme.
+
+- **Só dado público agregado por rua ou por quadrado de ~100 m; ferramenta cívica e neutra — 04/11/2026.** Tudo aqui é público, inclusive os documentos de IA, as issues e os logs. Chamado individual ou coordenada exata pode identificar quem chamou; o total por rua ou quadrado mostra o padrão sem expor ninguém. Dado bruto e credenciais ficam em `dados/` e no `.env`, só no computador. Sem conteúdo político-partidário em nenhum lugar. Decidiu: Guilherme.
+
+- **Aqui o GitHub impede o merge com o CI vermelho — 04/11/2026.** Revoga, neste repositório, a decisão do modelo "O CI não impede o merge; a regra do `CLAUDE.md` impede". Em repositório público, a regra de branch é grátis: o ruleset "Proteger a main" exige pull request e os checks "Documentos de IA" e "Código" verdes, barra push forçado e apagar a `main`, e não abre exceção nem para admin. Não exige aprovação de outra pessoa porque o responsável é o único membro e o GitHub não deixa aprovar o próprio pull request; a revisão do gestor e o teste manual seguem pela regra do `CLAUDE.md`. Decidiu: Guilherme.
+
+- **Repositório público na organização Free `mapas-abertos`, código sob a licença MIT e fonte dos dados citada — 04/11/2026.** O mapa é uma ferramenta cívica: método e fonte abertos deixam qualquer pessoa conferir os números. Custo: tudo fica visível, daí as regras de dado acima. Titular da licença do código: Guilherme Lobo de Carvalho. A licença dos dados de origem fica a definir até ser conferida na fonte. Decidiu: Guilherme.
 
 As decisões abaixo vêm do modelo P3 da mentoria. Para mudar uma delas, converse com o mentor e registre a nova decisão no topo.
 

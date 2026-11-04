@@ -1,8 +1,8 @@
-# Nome do projeto — a definir
+# Mapa 1746
 
-O que este repositório resolve, em duas frases: a definir.
+Mapa público dos chamados do 1746 do Rio de Janeiro, com totais por rua ou por quadrado de ~100 m, feito a partir dos dados abertos da Prefeitura. Método e fonte abertos, com atualização automática pelo GitHub Actions.
 
-**Responsável:** a definir · **Mentor:** `guilobocarvalho` no GitHub · **Início:** a definir · **Prazo:** a definir
+**Responsável:** Guilherme (`guilobocarvalho`) · **Mentor:** `guilobocarvalho` no GitHub · **Início:** 04/11/2026 · **Prazo:** a definir
 
 ## Regra deste arquivo — leia antes de editá-lo
 
@@ -12,10 +12,10 @@ Este arquivo é lido em **toda sessão**. Só entra aqui o que toda sessão prec
 
 ## O projeto
 
-**Critério de conclusão:** a definir.
+**Critério de conclusão:** mapa no GitHub Pages, publicado depois do OK do advogado, com os totais por rua e por quadrado de ~100 m, uma página de método e fonte, e a atualização automática pelo Actions rodando sem intervenção.
 
 **Escopo**
-- Dentro: a definir.
+- Dentro: coletar os chamados do 1746 nos dados abertos da Prefeitura (Data.Rio, BigQuery, só leitura), agregar por rua e por quadrado de ~100 m, publicar o mapa e a página de método e fonte, e atualizar tudo pelo Actions.
 - Fora: a definir.
 
 ## Regras
@@ -44,7 +44,7 @@ O responsável descreve e aprova; o Claude escreve o código e cuida do Git. Ant
 3. **Teste primeiro (TDD)**: de cada item do "Quando está pronta" da issue, escreva um teste em `testes/`, explique ao responsável em linguagem simples o que ele confere e rode para ver falhar. Só então escreva o código em `src/`, até o teste passar. Se o teste está certo, quem muda é o código, não o teste.
 4. O que não dá para testar automaticamente (programa externo, tela, arquivo real) vai para o teste manual do pull request, feito pelo responsável.
 5. **Antes de cada push**: `python verificacoes/verificar_tudo.py`. Algum ERRO → corrija antes do push. A barreira local (`.githooks/pre-commit`) confere segredos a cada commit; nunca a pule com `--no-verify`.
-6. **Pull request** com o template, ligado à issue (`Fecha #12`). Merge só com o CI verde, a revisão do gestor e o teste manual marcado pelo responsável. Conflito com a `main` (comum no `historico.md` e no `map.md` quando várias issues andam juntas): traga a `main` para o branch e mantenha as linhas dos dois lados; o CI confere a ordem do histórico e o mapa. Nunca faça merge com o CI vermelho: no GitHub Free com repositório privado, o GitHub não impede; esta regra impede.
+6. **Pull request** com o template, ligado à issue (`Fecha #12`). Merge só com o CI verde, a revisão do gestor e o teste manual marcado pelo responsável. Conflito com a `main` (comum no `historico.md` e no `map.md` quando várias issues andam juntas): traga a `main` para o branch e mantenha as linhas dos dois lados; o CI confere a ordem do histórico e o mapa. Aqui o GitHub impede o merge com o CI vermelho (regra da `main`, ver `decisoes.md`): nunca peça para desligá-la nem para abrir exceção.
 7. Depois do merge, a versão sai sozinha (tag com a data, ver `decisoes.md`). Não crie tags à mão.
 
 ## Segredos e dados
@@ -53,7 +53,9 @@ O responsável descreve e aprova; o Claude escreve o código e cuida do Git. Ant
 
 - Senha, token e chave de API: só no `.env` do computador (a partir do `.env.example`) e nos Secrets do repositório no GitHub. Nunca no código, em commit, em issue ou na conversa. Ver `docs/segredos_no_github.md`.
 - Se um segredo aparecer na conversa ou num arquivo, avise o responsável na hora: a chave tem de ser trocada no serviço de origem.
-- Dado de cliente ou de pessoas só vai para o GitHub se o responsável disser que pode. O que pode ir fica em `_referencias/`; o que não pode fica em `dados/`, que o git ignora.
+- **Este repositório é público:** qualquer pessoa vê todos os arquivos (inclusive este, `memory.md`, `decisoes.md`, `historico.md` e o Backlog), as issues, os pull requests e os logs do Actions. Nada de dado sensível em nenhum deles, nem impresso num log.
+- É uma ferramenta cívica e neutra: nenhum conteúdo político-partidário em arquivo, issue, pull request ou commit.
+- Só entra dado público agregado por rua ou por quadrado de ~100 m. Chamado individual, coordenada exata, dado de pessoas e credenciais nunca entram: o dado bruto fica em `dados/`, só no computador. O que pode ir fica em `_referencias/`.
 
 ## Onde guardar cada coisa
 

@@ -1,4 +1,4 @@
-# Memória — a definir
+# Memória — Mapa 1746
 
 > Como o responsável gosta de trabalhar e onde o Claude já errou. Lido antes de qualquer tarefa. As regras do projeto ficam no `CLAUDE.md`; aqui só preferências e correções.
 >
@@ -6,7 +6,8 @@
 
 ## Como o responsável gosta de trabalhar
 
-- A definir. Anote aqui, com a data, o que o responsável pedir ou corrigir sobre o jeito de trabalhar.
+- 04/11/2026: explicar em linguagem simples e pedir OK, em uma frase, antes de cada mudança no GitHub. Várias mudanças podem ir numa pergunta só, cada uma descrita.
+- 04/11/2026: este projeto também é um teste do modelo P3. O que do modelo atrapalhar, faltar ou confundir vai para o Backlog com a origem "modelo P3" e a data; no fim da sessão, mostrar as linhas novas.
 
 ## Correções recorrentes
 

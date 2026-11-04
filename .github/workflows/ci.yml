@@ -1,7 +1,8 @@
 # Conferência automática (CI): roda a cada pull request e a cada mudança na main.
 # As mesmas verificações rodam no seu computador com: python verificacoes/verificar_tudo.py
-# No GitHub Free, com repositório privado, o GitHub não impede o merge com o CI vermelho.
-# Quem impede é a regra do CLAUDE.md: merge só com o CI verde.
+# Repositório público: a regra da main (Settings > Rules > Rulesets > "Proteger a main")
+# exige os jobs "Documentos de IA" e "Código" verdes antes do merge. Ao renomear um job,
+# atualize a regra. Os logs são públicos: nunca imprima segredo nem dado bruto.
 
 name: CI
 

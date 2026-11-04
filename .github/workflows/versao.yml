@@ -2,7 +2,8 @@
 # A versão é a data do merge: v2026.11.04 (e v2026.11.04.2 se houver outra no mesmo dia).
 # Em seguida chama o deploy.yml, que é onde o CD vai entrar.
 #
-# Por que esperar o CI: no GitHub Free o merge não é barrado; assim, pelo menos,
+# Por que esperar o CI: aqui a regra da main já barra o merge com o CI vermelho
+# (repositório público); esperar o CI de novo na main é a segunda garantia de que
 # versão e deploy só saem com o CI verde.
 
 name: Versão

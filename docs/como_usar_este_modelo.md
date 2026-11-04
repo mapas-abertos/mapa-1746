@@ -10,7 +10,7 @@ Passo a passo da primeira vez, da organização criada ao CI verde. O passo 1 é
 ## 1. Organização e repositório (o mentor faz)
 
 1. O mentor cria uma organização no plano Free, com o nome que você escolher, e convida você como dono (**Owner**). Aceite o convite, que chega por e-mail ou em https://github.com/notifications.
-2. O mentor cria o seu repositório dentro da organização a partir do modelo `guilobocarvalho/mentoria-p3-modelo` (**Use this template › Create a new repository**), privado (**Private**), com nome sem espaço e sem acento (`ferramentas-medicao`). O repositório já vem com todos os arquivos do modelo, sem o histórico dele.
+2. O mentor cria o seu repositório dentro da organização a partir do modelo `guilobocarvalho/mentoria-p3-modelo` (**Use this template › Create a new repository**), privado (**Private**; este repositório é público, ver `decisoes.md`), com nome sem espaço e sem acento (`ferramentas-medicao`). O repositório já vem com todos os arquivos do modelo, sem o histórico dele.
 3. O mentor roda o workflow **Etiquetas** no repositório novo (Actions › Etiquetas › Run workflow): ele cria as etiquetas das issues e apaga as padrão do GitHub.
 4. O mentor registra no `Checklist_Projeto.md` › Dados-chave a versão do modelo usada na cópia (a mais recente em **Releases** do modelo). É dela que partem as atualizações (ver `atualizar_do_modelo.md`).
 5. O mentor liga, no repositório novo, **Settings › General › Automatically delete head branches** (apaga o branch depois do merge). O template não copia as configurações.

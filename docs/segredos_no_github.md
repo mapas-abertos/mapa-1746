@@ -41,7 +41,9 @@ import os
 chave = os.environ["MINHA_CHAVE_DE_API"]
 ```
 
-No GitHub Free com repositório privado, os segredos ficam no nível do repositório: não há segredo por ambiente (environments). Para uma ferramenta simples, basta.
+Este repositório é público: no GitHub Free, repositório público tem ambientes (**environments**), com segredo próprio e regra de qual branch pode usá-lo. Credencial que dá acesso a dados (como a do BigQuery, só leitura) vai num environment restrito à `main`, e não num Secret solto do repositório.
+
+Os logs do Actions também são públicos. O GitHub esconde o valor dos Secrets no log, mas não o que a ferramenta imprimir a partir deles: nunca imprima segredo, nem dado bruto.
 
 ## A barreira do CI
 

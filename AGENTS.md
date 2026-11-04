@@ -1,4 +1,4 @@
-# Nome do projeto — a definir
+# Mapa 1746
 
 As instruções deste projeto estão em `CLAUDE.md`. Leia esse arquivo no início de toda sessão e siga tudo o que ele diz, como se estivesse escrito aqui.
 
