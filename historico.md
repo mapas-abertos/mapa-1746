@@ -6,6 +6,7 @@
 
 ## 2026-11-05
 
+- Atualizado do modelo P3 `v2026.11.05.2` para `v2026.11.05.3`: glossário em português (`docs/glossario.md`, com a regra no `CLAUDE.md`) e publicação separada (rotina Publicar versão, linha `prod`, travas do computador para a `prod`; o `versao.yml` saiu). Um conflito, no `docs/segredos_no_github.md`, resolvido com o texto daqui. O `versao.yml` daqui tinha comentários próprios e foi apagado à mão. README, `SECURITY.md` e `CONTRIBUTING.md` são deste projeto e não mudaram.
 - Atualizado do modelo P3 `v2026.11.04.4` para `v2026.11.05.2`, pelo `docs/atualizar_do_modelo.md` (feito pelo mentor). Vieram as travas no git (commit na `main` e `verificar_tudo` antes do push), as permissões que pedem confirmação para push e merge, os sub chats com worktree, o subagente `revisor`, as skills, o Gitleaks no CI, `Closes #N`, o workflow que tira as etiquetas de situação ao fechar a issue, os formulários de tarefa e de quem é de fora, o Dependabot e os textos de repositório público. Cinco conflitos, resolvidos assim: `ci.yml` e `versao.yml` com o texto do modelo, que cobre o caso público; `dependencias.yml` com o do modelo (condição de visibilidade e `dependency-review-action@v5`), mantendo a licença MIT deste projeto; `docs/segredos_no_github.md` com o texto daqui, mais específico; guia com o do modelo. As linhas 1 a 14 do Backlog com origem "modelo P3" foram resolvidas no modelo (issues #6 a #9 de lá).
 
 ## 2026-11-04

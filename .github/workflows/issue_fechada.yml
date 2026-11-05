@@ -2,7 +2,7 @@
 # Fechar uma issue não tira etiqueta nenhuma sozinho; sem isto, a lista de issues
 # ficaria com "em andamento" em issue já resolvida.
 
-name: Issue fechada
+name: Chamado fechado
 
 on:
   issues:

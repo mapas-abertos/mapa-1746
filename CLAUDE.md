@@ -25,6 +25,7 @@ Este arquivo é lido em **toda sessão**. Só entra aqui o que toda sessão prec
 - Marcar `[x]` no checklist ao resolver um item e anotar decisão e responsável na linha.
 - Ideia de melhoria vai para `Backlog_Melhorias.md`. Não implementar sem aprovação. O que seria melhor no próprio modelo (CI, regras, guias), e não neste projeto, entra lá com a origem "modelo P3": o mentor leva de volta ao modelo.
 - Idioma: português (Brasil). Respostas diretas e concisas, sem jargão: o responsável não precisa saber programar.
+- Ao falar com o responsável, use os nomes de `docs/glossario.md` (salvar etapa, enviar para a nuvem, pedido de revisão, versão aprovada…), com o termo em inglês entre parênteses na primeira vez em cada conversa: é o que aparece nas telas do GitHub.
 
 ## Papéis dos chats
 
@@ -45,7 +46,7 @@ O responsável descreve e aprova; o Claude escreve o código e cuida do Git. Ant
 4. O que não dá para testar automaticamente (programa externo, tela, arquivo real) vai para o teste manual do pull request, feito pelo responsável.
 5. **Antes de cada push**: `python verificacoes/verificar_tudo.py`. Algum ERRO → corrija antes do push. As barreiras locais barram commit direto na `main` e segredos (`.githooks/pre-commit`) e rodam o `verificar_tudo` antes do push (`.githooks/pre-push`); nunca as pule com `--no-verify`.
 6. **Pull request** com o template, ligado à issue (`Closes #12`, em inglês: o GitHub não entende `Fecha`). Merge só com o CI verde, a revisão do gestor e o teste manual marcado pelo responsável. Conflito com a `main` (comum no `historico.md` e no `map.md` quando várias issues andam juntas): traga a `main` para o branch e mantenha as linhas dos dois lados; o CI confere a ordem do histórico e o mapa. Aqui o GitHub impede o merge com o CI vermelho (regra da `main`, ver `decisoes.md`): nunca peça para desligá-la nem para abrir exceção.
-7. Depois do merge, a versão sai sozinha (tag com a data, ver `decisoes.md`). Não crie tags à mão.
+7. **Publicar é separado de juntar:** o merge só leva à versão aprovada (`main`). A versão em uso (`prod`) só muda pela rotina **Publicar versão** (`gh workflow run publicar.yml`), e só quando o responsável pedir; aqui o GitHub ainda pede a aprovação dele (ambiente `prod`). Nunca crie tags nem mexa na `prod` à mão.
 
 ## Segredos e dados
 

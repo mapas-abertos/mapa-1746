@@ -31,7 +31,7 @@ body:
     id: quando_pronta
     attributes:
       label: Quando ela está pronta?
-      description: O que você vai conferir para aprovar. Cada item vira um teste automático e entra no teste manual do pull request.
+      description: O que você vai conferir para aprovar. Cada item vira um teste automático e entra no teste manual do pedido de revisão (pull request).
       placeholder: |
         - Com a planilha de exemplo, o resumo mostra as 3 obras e o total bate.
         - Com uma planilha sem a coluna de valor, avisa qual coluna falta.

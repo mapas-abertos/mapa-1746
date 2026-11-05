@@ -1,14 +1,15 @@
 #!/bin/sh
-# Barreira local, antes de cada commit:
-# 1. nada de commit direto na main (tudo passa por branch e pull request);
+# Trava do computador (hook), antes de salvar etapa (commit):
+# 1. nada de salvar etapa direto na versão aprovada (main) nem na versão em uso (prod):
+#    tudo passa por linha de trabalho e pedido de revisão;
 # 2. segredos e arquivos proibidos são barrados no seu computador, antes de irem para o GitHub.
 # Ligada uma vez por repositório com: git config core.hooksPath .githooks
 # Não pule esta barreira (git commit --no-verify).
 
 RAMO=$(git symbolic-ref --short HEAD 2> /dev/null)
-if [ "$RAMO" = "main" ]; then
-  echo "Commit direto na main barrado."
-  echo "O que fazer: crie um branch para a issue (ex.: git switch -c issue-12-nome-curto) e faça o commit lá."
+if [ "$RAMO" = "main" ] || [ "$RAMO" = "prod" ]; then
+  echo "Salvar etapa (commit) direto na versão aprovada (main) ou na versão em uso (prod) barrado."
+  echo "O que fazer: crie uma linha de trabalho (branch) para o chamado (ex.: git switch -c issue-12-nome-curto) e salve a etapa lá."
   exit 1
 fi
 
@@ -21,6 +22,6 @@ fi
 
 if ! "$PY" verificacoes/segredos.py; then
   echo
-  echo "Commit barrado pela barreira local. Corrija o que está acima e faça o commit de novo."
+  echo "Salvar etapa (commit) barrado pela trava do computador. Corrija o que está acima e salve de novo."
   exit 1
 fi

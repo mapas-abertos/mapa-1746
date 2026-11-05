@@ -11,7 +11,7 @@ Fonte de verdade do andamento. Marque `[x]` ao resolver e anote decisão e respo
 | Responsável | Guilherme (`guilobocarvalho`); neste projeto, o mesmo usuário do mentor |
 | Mentor | `guilobocarvalho` no GitHub |
 | Organização no GitHub | `mapas-abertos` (plano Free, criada em 04/11/2026) |
-| Modelo de origem | `v2026.11.05.2` do `guilobocarvalho/mentoria-p3-modelo` (ver `docs/atualizar_do_modelo.md`) |
+| Modelo de origem | `v2026.11.05.3` do `guilobocarvalho/mentoria-p3-modelo` (ver `docs/atualizar_do_modelo.md`) |
 | Início | 04/11/2026 |
 | Prazo / marco | a definir |
 | Critério de conclusão | ver `CLAUDE.md` › O projeto |

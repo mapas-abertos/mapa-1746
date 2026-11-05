@@ -1,5 +1,5 @@
 name: Tarefa de configuração ou documentação
-description: Trabalho que não é ferramenta, como ajustar o CI, uma configuração do GitHub, um guia ou os documentos de IA.
+description: Trabalho que não é ferramenta, como ajustar a conferência automática (CI), uma configuração do GitHub, um guia ou os documentos de IA.
 title: "[Tarefa] "
 labels: ["tarefa"]
 body:
@@ -32,6 +32,6 @@ body:
       description: "O que você vai conferir para aprovar. Ex.: um arquivo diz tal coisa, um check fica verde, uma configuração aparece ligada na tela."
       placeholder: |
         - O guia explica o passo novo.
-        - O CI fica verde no pull request.
+        - A conferência automática fica verde no pedido de revisão.
     validations:
       required: true
