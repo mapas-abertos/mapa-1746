@@ -5,8 +5,10 @@ verificação nele. Nada do repositório de verdade é alterado.
 """
 
 import importlib.util
+import os
 import subprocess
 from datetime import date
+from pathlib import Path
 
 import pytest
 
@@ -49,17 +51,26 @@ BASE = {
 }
 
 
+def montar_repo(pasta):
+    """Monta em `pasta` o repositório mínimo que passa em todas as verificações."""
+    for caminho, texto in BASE.items():
+        arquivo = pasta / caminho
+        arquivo.parent.mkdir(parents=True, exist_ok=True)
+        arquivo.write_text(texto, encoding="utf-8")
+    # Sem as variáveis GIT_* herdadas (a trava do envio as recebe do git): com elas, o
+    # git init reinicializaria o repositório de verdade, e não este de teste.
+    sem_git = {nome: valor for nome, valor in os.environ.items() if not nome.startswith("GIT_")}
+    subprocess.run(
+        ["git", "init", "-q"], cwd=pasta, check=True, stdin=subprocess.DEVNULL, capture_output=True,
+        env=sem_git,
+    )
+    return pasta
+
+
 @pytest.fixture
 def repo(tmp_path):
     """Repositório mínimo que passa em todas as verificações."""
-    for caminho, texto in BASE.items():
-        arquivo = tmp_path / caminho
-        arquivo.parent.mkdir(parents=True, exist_ok=True)
-        arquivo.write_text(texto, encoding="utf-8")
-    subprocess.run(
-        ["git", "init", "-q"], cwd=tmp_path, check=True, stdin=subprocess.DEVNULL, capture_output=True
-    )
-    return tmp_path
+    return montar_repo(tmp_path)
 
 
 def escrever(repo, caminho, texto):
@@ -258,3 +269,30 @@ def test_testes_falha_com_codigo_sem_teste(repo):
 def test_testes_passa_com_codigo_e_teste(repo):
     arquivos = ["src/ferramenta.py", "testes/test_ferramenta.py"]
     assert rodar_testes.falta_teste(arquivos) == []
+
+
+# ---- Trava do envio (issue #20) ----
+# Dentro da trava, o git passa o endereço do repositório de verdade (GIT_DIR). Um git init
+# de teste que herde esse endereço reinicializa o repositório de verdade (core.bare = true).
+
+RAIZ = Path(__file__).resolve().parents[2]
+
+
+def test_repositorio_de_teste_nao_toca_outro_repositorio(tmp_path, monkeypatch):
+    outro = tmp_path / "outro"
+    outro.mkdir()
+    subprocess.run(["git", "init", "-q", str(outro)], check=True, stdin=subprocess.DEVNULL,
+                   capture_output=True, env={k: v for k, v in os.environ.items() if not k.startswith("GIT_")})
+    config_antes = (outro / ".git" / "config").read_text(encoding="utf-8")
+    monkeypatch.setenv("GIT_DIR", str(outro / ".git"))
+    novo = tmp_path / "novo"
+    novo.mkdir()
+    montar_repo(novo)
+    assert (novo / ".git").is_dir()
+    assert (outro / ".git" / "config").read_text(encoding="utf-8") == config_antes
+
+
+def test_trava_do_envio_limpa_o_endereco_do_git_antes_das_verificacoes():
+    trava = (RAIZ / ".githooks" / "pre-push").read_text(encoding="utf-8")
+    assert "unset GIT_DIR GIT_WORK_TREE GIT_INDEX_FILE" in trava
+    assert trava.index("unset GIT_DIR GIT_WORK_TREE GIT_INDEX_FILE") < trava.index("verificar_tudo.py")
