@@ -1,4 +1,4 @@
 # Ferramentas das verificações, com a versão fixa para o resultado sair igual em todo computador.
 # Instalar: pip install -r requirements-dev.txt
 ruff==0.17.3
-pytest==9.0.3
+pytest==9.2.0
