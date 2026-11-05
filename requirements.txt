@@ -1,3 +1,8 @@
 # Bibliotecas que as ferramentas de src/ usam, com a versão fixa (ex.: openpyxl==3.1.5).
 # Biblioteca nova: o Claude acrescenta aqui no mesmo pull request da ferramenta.
 # Instalar (com a .venv ativa): pip install -r requirements.txt
+
+# Agregador (issue #7): converte latitude e longitude para a grade em metros (EPSG:31983).
+pyproj==3.8.0
+# Usada pelo pyproj.
+certifi==2026.10.23

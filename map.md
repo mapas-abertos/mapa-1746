@@ -58,8 +58,8 @@ Cada pasta tem um `LEIA-ME.md` com as regras dela (menos as que começam com pon
 ## Arquivos
 
 - `*/LEIA-ME.md` e `verificacoes/testes/LEIA-ME.md` — regras de cada pasta.
-- `src/exemplo.py` — ferramenta de exemplo (dias úteis entre duas datas); sai com a primeira ferramenta de verdade.
-- `testes/test_exemplo.py` — testes da ferramenta de exemplo.
+- `src/agregador.py` — agregador (issue #7): lê a lista de chamados e grava os totais por rua (`ruas.csv`) e por quadrado de 100 m (`quadrados.csv`, `quadrados.geojson`), com o resumo.
+- `testes/test_agregador.py` — testes do agregador, com uma lista de chamados fictícia.
 - `docs/glossario.md` — os nomes em português para o Git e o GitHub, com o termo em inglês.
 - `docs/como_usar_este_modelo.md` — passo a passo da primeira vez, do repositório vazio ao CI verde.
 - `docs/atualizar_do_modelo.md` — como o mentor traz as melhorias do modelo P3 para este repositório, por pull request.
@@ -90,4 +90,4 @@ Cada pasta tem um `LEIA-ME.md` com as regras dela (menos as que começam com pon
 
 ## Status atual
 
-- Primeira ferramenta: a definir.
+- Primeira ferramenta: agregador (issue #7), em revisão. Próximas: coleta no BigQuery e desenho das ruas.
