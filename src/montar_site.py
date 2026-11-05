@@ -261,7 +261,9 @@ def _pagina_do_mapa(minimo):
 
 
 def _pagina_de_metodo(minimo, resumo):
-    mais_recente = _data_do_resumo(resumo, "chamado mais recente", "data do chamado mais recente")
+    mais_recente = _data_do_resumo(
+        resumo, "chamado mais recente na base", "chamado mais recente", "data do chamado mais recente"
+    )
     coleta = _data_do_resumo(resumo, "data da coleta", "coleta")
     sem_coordenada = resumo.get("sem coordenada", "")
     aviso_sem_coordenada = (

@@ -305,6 +305,42 @@ def test_metodo_mostra_as_datas_do_resumo_em_dia_mes_ano(tmp_path):
     assert "05/11/2026" in pagina
 
 
+RESUMO_DA_COLETA = """Resumo da coleta (chamados do 1746)
+fonte: datario.adm_central_atendimento_1746.chamado (BigQuery, só leitura)
+período: todos
+chamados lidos: 19
+sem rua: 2
+  dos quais com rua fora do cadastro de logradouros: 0
+sem coordenada: 4
+chamado mais recente na base: 2026-10-30
+data da coleta: 2026-11-05
+ruas: 5
+ruas com desenho: 0
+quadrados: 3
+mínimo para mostrar o número: 5
+GB lidos no BigQuery (simulação): 0,1
+"""
+
+
+def test_metodo_le_as_datas_do_resumo_no_formato_da_coleta(tmp_path):
+    pasta = agregado(tmp_path)
+    (pasta / "resumo.txt").write_text(RESUMO_DA_COLETA, encoding="utf-8")
+    site = tmp_path / "site"
+    montar_site(pasta, site)
+    pagina = sem_marcas(texto(site, "metodo.html"))
+    assert "Chamado mais recente na base: 30/10/2026" in pagina
+    assert "Data da coleta: 05/11/2026" in pagina
+
+
+def test_metodo_diz_a_definir_quando_a_coleta_nao_achou_chamado(tmp_path):
+    pasta = agregado(tmp_path)
+    resumo = RESUMO_DA_COLETA.replace("na base: 2026-10-30", "na base: nenhum")
+    (pasta / "resumo.txt").write_text(resumo, encoding="utf-8")
+    site = tmp_path / "site"
+    montar_site(pasta, site)
+    assert "Chamado mais recente na base: a definir" in sem_marcas(texto(site, "metodo.html"))
+
+
 def test_metodo_diz_a_definir_quando_o_resumo_nao_traz_as_datas(tmp_path):
     _, site = montar(tmp_path)  # o resumo do agregador não tem as duas datas
     pagina = sem_marcas(texto(site, "metodo.html"))
