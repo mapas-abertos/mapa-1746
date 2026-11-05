@@ -1,8 +1,10 @@
 # Conferência automática (CI): roda a cada pull request e a cada mudança na main.
 # As mesmas verificações rodam no seu computador com: python verificacoes/verificar_tudo.py
-# Repositório público: a regra da main (Settings > Rules > Rulesets > "Proteger a main")
-# exige os jobs "Documentos de IA" e "Código" (daqui) e "Revisão de dependências"
-# (dependencias.yml) verdes antes do merge. Ao renomear um job, atualize a regra. Os logs são públicos: nunca imprima segredo nem dado bruto.
+# Repositório privado: no GitHub Free, o GitHub não impede o merge com o CI vermelho;
+# quem impede é a regra do CLAUDE.md. Repositório público: a regra "Proteger a main"
+# exige estes dois jobs e o "Revisão de dependências" (dependencias.yml) verdes.
+# Ao renomear um job, atualize .github/rulesets/proteger_main.json. Em público, os logs
+# são públicos: nunca imprima segredo nem dado bruto.
 
 name: CI
 
@@ -36,6 +38,23 @@ jobs:
           python-version: "3.12"
       - name: Barrar segredos e arquivos proibidos
         run: python verificacoes/segredos.py
+      - name: Segunda barreira de segredos (Gitleaks)
+        env:
+          VERSAO: "8.30.1"
+        run: |
+          # Gitleaks: detector de segredos mais completo, baixado do site oficial e conferido.
+          # Usa o programa direto (e não a gitleaks-action, que pede licença para organizações).
+          cd "$RUNNER_TEMP"
+          BASE="https://github.com/gitleaks/gitleaks/releases/download/v$VERSAO"
+          curl -sSfLO "$BASE/gitleaks_${VERSAO}_linux_x64.tar.gz"
+          curl -sSfLO "$BASE/gitleaks_${VERSAO}_checksums.txt"
+          grep "gitleaks_${VERSAO}_linux_x64.tar.gz" "gitleaks_${VERSAO}_checksums.txt" | sha256sum -c -
+          tar -xzf "gitleaks_${VERSAO}_linux_x64.tar.gz" gitleaks
+          cd "$GITHUB_WORKSPACE"
+          if ! "$RUNNER_TEMP/gitleaks" dir . --redact --no-banner; then
+            echo "::error::A segunda barreira (Gitleaks) achou algo com cara de segredo. Veja acima o arquivo e a linha (mensagem em inglês). Se for real, troque a chave no serviço de origem; se for alarme falso, fale com o mentor."
+            exit 1
+          fi
       - name: Instalar as bibliotecas das ferramentas e as de verificação
         run: pip install -r requirements.txt -r requirements-dev.txt
       - name: Lint do Python

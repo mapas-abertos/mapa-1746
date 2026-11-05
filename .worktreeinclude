@@ -1,0 +1,4 @@
+# Arquivos ignorados pelo git que o Claude Code copia para cada worktree novo
+# (a pasta separada de cada sub chat). Mesmo formato do .gitignore.
+# Só arquivos pequenos: a .venv não entra; o sub chat cria a dele.
+.env

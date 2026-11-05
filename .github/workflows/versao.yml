@@ -2,9 +2,11 @@
 # A versão é a data do merge: v2026.11.04 (e v2026.11.04.2 se houver outra no mesmo dia).
 # Em seguida chama o deploy.yml, que é onde o CD vai entrar.
 #
-# Por que esperar o CI: aqui a regra da main já barra o merge com o CI vermelho
-# (repositório público); esperar o CI de novo na main é a segunda garantia de que
-# versão e deploy só saem com o CI verde.
+# Só ganha versão o commit que veio de um pull request com merge: o commit inicial de um
+# repositório criado pelo modelo e push direto na main não viram versão.
+#
+# Por que esperar o CI: em repositório privado, o GitHub Free não barra o merge; em público,
+# a regra da main já barra, e esperar o CI de novo é a segunda garantia.
 
 name: Versão
 
@@ -38,8 +40,20 @@ jobs:
         with:
           fetch-depth: 0 # traz as tags que já existem
 
+      - name: Conferir se o commit veio de um pull request
+        id: origem
+        run: |
+          PRS=$(gh api "repos/$GITHUB_REPOSITORY/commits/$COMMIT/pulls" --jq 'length' || echo 0)
+          if [ "$PRS" = "0" ]; then
+            echo "Commit sem pull request (commit inicial ou push direto): sem versão."
+            echo "veio_de_pr=nao" >> "$GITHUB_OUTPUT"
+          else
+            echo "veio_de_pr=sim" >> "$GITHUB_OUTPUT"
+          fi
+
       - name: Escolher o nome da versão
         id: tag
+        if: steps.origem.outputs.veio_de_pr == 'sim'
         run: |
           DATA=$(date +%Y.%m.%d)
           TAG="v$DATA"
@@ -52,6 +66,7 @@ jobs:
           echo "Versão: $TAG"
 
       - name: Criar a tag e o Release
+        if: steps.origem.outputs.veio_de_pr == 'sim'
         env:
           TAG: ${{ steps.tag.outputs.tag }}
         run: |
@@ -63,6 +78,7 @@ jobs:
   deploy:
     name: Entregar a versão
     needs: versao
+    if: needs.versao.outputs.tag != ''
     uses: ./.github/workflows/deploy.yml
     with:
       versao: ${{ needs.versao.outputs.tag }}

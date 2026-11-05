@@ -1,5 +1,5 @@
 name: Suporte do mentor
-description: Travou em algo? Abra esta issue e o mentor é avisado.
+description: Só para o responsável do projeto. Travou em algo? Abra esta issue e o mentor é avisado.
 title: "[Suporte] "
 labels: ["suporte"]
 # Usuário do mentor no GitHub. Ele recebe a issue enquanto for membro da organização
@@ -10,7 +10,8 @@ body:
     attributes:
       value: |
         O mentor responde em até 24 horas, contadas em dias úteis.
-        Não cole senha, chave nem dado real de cliente aqui.
+        Não cole senha, chave, dado pessoal nem dado real de cliente aqui.
+        Não faz parte do projeto? Use "Sugestão ou erro (para quem é de fora)".
 
   - type: textarea
     id: fazendo
