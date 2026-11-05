@@ -1,0 +1,31 @@
+name: Sugestão ou erro (para quem é de fora)
+description: Não faz parte do projeto, mas viu um erro ou tem uma ideia? Comece por aqui.
+title: "[Sugestão] "
+labels: ["externo"]
+body:
+  - type: markdown
+    attributes:
+      value: |
+        Obrigado por ajudar. Esta issue é pública: qualquer pessoa vê o que você escrever.
+        Não cole dado pessoal (nome, telefone, e-mail, endereço), senha nem chave.
+        Falha de segurança não vai aqui: veja o SECURITY.md.
+
+  - type: textarea
+    id: o_que
+    attributes:
+      label: O que você viu ou sugere?
+    validations:
+      required: true
+
+  - type: textarea
+    id: onde
+    attributes:
+      label: Onde?
+      description: Qual ferramenta, página, arquivo ou resultado.
+    validations:
+      required: true
+
+  - type: textarea
+    id: esperava
+    attributes:
+      label: O que você esperava?

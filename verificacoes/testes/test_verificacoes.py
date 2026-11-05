@@ -153,6 +153,15 @@ def test_documentos_arquivo_ignorado_pelo_git_nao_precisa_estar_no_mapa(repo):
     assert documentos_ia.verificar(repo, HOJE) == []
 
 
+def test_documentos_pasta_coberta_por_coringa(repo):
+    escrever(repo, "docs/a/LEIA-ME.md", "a")
+    escrever(repo, "docs/b/LEIA-ME.md", "b")
+    escrever(repo, "docs/LEIA-ME.md", "docs")
+    extra = "- `docs/` e `docs/*/` — guias\n- `docs/LEIA-ME.md` e `docs/*/LEIA-ME.md` — regras\n"
+    escrever(repo, "map.md", MAPA + extra)
+    assert documentos_ia.verificar(repo, HOJE) == []
+
+
 # ---- Segredos ----
 
 

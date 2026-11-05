@@ -9,8 +9,8 @@ O repositório nasceu de uma cópia do modelo P3 (`guilobocarvalho/mentoria-p3-m
 | Vem do modelo (a atualização traz) | É do projeto (a atualização não mexe) |
 |---|---|
 | `verificacoes/`, `.github/`, `.githooks/`, `.claude/` | `CLAUDE.md`, `memory.md`, `map.md`, `historico.md`, `decisoes.md`, `Checklist_Projeto.md`, `Backlog_Melhorias.md`, `README.md` |
-| `docs/como_usar_este_modelo.md`, `docs/segredos_no_github.md`, `docs/papeis_dos_chats.md`, `docs/atualizar_do_modelo.md` | `src/`, `testes/`, `_referencias/`, `requirements.txt`, `.env.example` e os outros guias de `docs/` |
-| `pyproject.toml`, `requirements-dev.txt`, `.gitignore`, `.gitattributes` | |
+| `docs/como_usar_este_modelo.md`, `docs/segredos_no_github.md`, `docs/papeis_dos_chats.md`, `docs/atualizar_do_modelo.md` | `src/`, `testes/`, `_referencias/`, `requirements.txt`, `.env.example`, `SECURITY.md`, `CONTRIBUTING.md` e os outros guias de `docs/` |
+| `pyproject.toml`, `requirements-dev.txt`, `.gitignore`, `.gitattributes`, `.worktreeinclude` | |
 
 Se o projeto mudou um arquivo da coluna da esquerda, a atualização tenta juntar as duas mudanças; o que não juntar sozinho aparece como conflito, para resolver no pull request.
 
@@ -29,7 +29,7 @@ No clone do repositório do projeto, com o Claude Code:
 3. Aplicar só o que mudou no modelo entre as duas versões, nas partes que vêm do modelo:
 
    ```
-   git diff refs/modelo/<versão de origem> refs/modelo/<versão nova> -- verificacoes .github .githooks .claude docs/como_usar_este_modelo.md docs/segredos_no_github.md docs/papeis_dos_chats.md docs/atualizar_do_modelo.md pyproject.toml requirements-dev.txt .gitignore .gitattributes | git apply --3way
+   git diff refs/modelo/<versão de origem> refs/modelo/<versão nova> -- verificacoes .github .githooks .claude docs/como_usar_este_modelo.md docs/segredos_no_github.md docs/papeis_dos_chats.md docs/atualizar_do_modelo.md pyproject.toml requirements-dev.txt .gitignore .gitattributes .worktreeinclude | git apply --3way
    ```
 
 4. Arquivo novo do modelo: acrescentar no `map.md` (o `verificar_tudo` acusa o que faltar). Rodar `python verificacoes/verificar_tudo.py`.

@@ -1,4 +1,4 @@
-# Etiquetas das issues: cria as cinco do modelo e apaga as padrão do GitHub.
+# Etiquetas das issues: cria as do modelo e apaga as padrão do GitHub.
 #
 # Rodar uma vez, à mão, logo depois de criar o repositório a partir do modelo:
 # Actions > Etiquetas > Run workflow. Pode rodar de novo sem problema: só acerta
@@ -25,6 +25,8 @@ jobs:
           # Tipo da issue (o formulário põe sozinho)
           gh label create "pedido" --color 0E8A16 --description "Ferramenta nova ou mudança numa que já existe" --force
           gh label create "defeito" --color B60205 --description "Ferramenta que já existe fazendo algo errado" --force
+          gh label create "tarefa" --color 1D76DB --description "Configuração ou documentação, sem ser ferramenta" --force
+          gh label create "externo" --color C5DEF5 --description "Aberta por quem é de fora do projeto (repositório público)" --force
           gh label create "suporte" --color D93F0B --description "Travou: o mentor é avisado" --force
           # Situação (o gestor põe e tira)
           gh label create "em andamento" --color FBCA04 --description "Um sub chat (ou subagente) está trabalhando nesta issue" --force

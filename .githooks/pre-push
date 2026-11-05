@@ -1,0 +1,18 @@
+#!/bin/sh
+# Antes de cada push: roda todas as verificações (as mesmas do CI).
+# Com algum ERRO, o push não sai. Ligada junto com o pre-commit:
+# git config core.hooksPath .githooks
+# Não pule esta barreira (git push --no-verify).
+
+# Python da .venv, se existir; senão, o do computador.
+if [ -x .venv/Scripts/python ]; then PY=.venv/Scripts/python
+elif [ -x .venv/bin/python ]; then PY=.venv/bin/python
+elif command -v python > /dev/null 2>&1; then PY=python
+else PY=python3
+fi
+
+if ! "$PY" verificacoes/verificar_tudo.py; then
+  echo
+  echo "Push barrado: corrija os ERROS acima e faça o push de novo."
+  exit 1
+fi

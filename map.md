@@ -29,8 +29,12 @@
 - `requirements-dev.txt` — ferramentas das verificações, com a versão fixa.
 - `requirements.txt` — bibliotecas que as ferramentas de `src/` usam, com a versão fixa.
 - `.gitattributes` — fim de linha igual (LF) em todo computador e no GitHub.
-- `.githooks/pre-commit` — barreira local: confere segredos antes de cada commit.
-- `.claude/settings.json` — permissões do Claude Code: libera os comandos de rotina e bloqueia o `.env` e a `dados/`.
+- `.githooks/pre-commit` — barreira local: barra commit direto na `main` e segredos, antes de cada commit.
+- `.githooks/pre-push` — roda o `verificar_tudo` antes de cada push.
+- `.worktreeinclude` — o que o Claude Code copia para o worktree de cada sub chat (o `.env`).
+- `.claude/settings.json` — permissões do Claude Code: libera os comandos de rotina, pede confirmação para push, merge e release, e bloqueia o `.env`, a `dados/` e o `--force`.
+- `.claude/agents/revisor.md` — subagente revisor, só de leitura: compara o pull request com a issue.
+- `.claude/skills/*/SKILL.md` — skills: `operar-issue`, `abrir-pedido`, `fim-de-sessao`, `atualizar-do-modelo` e `configurar-publico` (as duas últimas só o mentor dispara).
 
 ## Pastas
 
@@ -45,8 +49,11 @@ Cada pasta tem um `LEIA-ME.md` com as regras dela (menos as que começam com pon
 - `.github/` — configuração do GitHub.
 - `.githooks/` — ganchos do git (ligados com `git config core.hooksPath .githooks`).
 - `.claude/` — configuração do Claude Code para este repositório.
+- `.claude/agents/` — subagentes.
+- `.claude/skills/` e `.claude/skills/*/` — skills, uma pasta por procedimento.
 - `.github/workflows/` — workflows do GitHub Actions.
 - `.github/ISSUE_TEMPLATE/` — formulários de issue.
+- `.github/rulesets/` — regras da `main` e das versões, como estão aplicadas aqui (skill `configurar-publico`).
 
 ## Arquivos
 
@@ -68,11 +75,16 @@ Cada pasta tem um `LEIA-ME.md` com as regras dela (menos as que começam com pon
 - `.github/workflows/versao.yml` — depois do CI verde na `main`, cria a tag com a data e o Release e chama o deploy.
 - `.github/workflows/deploy.yml` — ponto de encaixe do CD; destino a definir.
 - `.github/workflows/dependencias.yml` — revisão de dependências a cada pull request: barra vulnerabilidade alta ou crítica e licença incompatível com a MIT.
+- `.github/workflows/issue_fechada.yml` — quando uma issue fecha, tira `em andamento` e `aguardando responsável`.
+- `.github/dependabot.yml` — pull request mensal com versão nova das actions e das bibliotecas fixadas.
+- `.github/rulesets/*.json` — `proteger_main.json` (pull request e CI verde obrigatórios) e `proteger_versoes.json` (tags `v*` não se apagam).
 - `.github/workflows/etiquetas.yml` — cria as etiquetas das issues e apaga as padrão; rodar à mão, uma vez.
 - `.github/ISSUE_TEMPLATE/pedido_ferramenta.yml` — formulário "Pedido de ferramenta": o que faz, onde entra, quando está pronta.
 - `.github/ISSUE_TEMPLATE/defeito.yml` — formulário "Defeito numa ferramenta": o que fez, o que deveria acontecer, o que aconteceu.
+- `.github/ISSUE_TEMPLATE/tarefa.yml` — formulário "Tarefa de configuração ou documentação".
+- `.github/ISSUE_TEMPLATE/externo.yml` — formulário "Sugestão ou erro (para quem é de fora)", sem marcar o mentor.
 - `.github/ISSUE_TEMPLATE/suporte.yml` — formulário "Suporte do mentor", que marca o mentor.
-- `.github/ISSUE_TEMPLATE/config.yml` — toda issue começa por um dos três formulários.
+- `.github/ISSUE_TEMPLATE/config.yml` — toda issue começa por um dos formulários.
 - `.github/PULL_REQUEST_TEMPLATE.md` — checklist do teste manual e do merge.
 
 ## Status atual

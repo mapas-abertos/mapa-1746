@@ -1,0 +1,27 @@
+# Issue fechada: tira as etiquetas de situação ("em andamento" e "aguardando responsável").
+# Fechar uma issue não tira etiqueta nenhuma sozinho; sem isto, a lista de issues
+# ficaria com "em andamento" em issue já resolvida.
+
+name: Issue fechada
+
+on:
+  issues:
+    types: [closed]
+
+permissions:
+  issues: write
+
+jobs:
+  limpar:
+    name: Tirar etiquetas de situação
+    runs-on: ubuntu-latest
+    env:
+      GH_TOKEN: ${{ github.token }}
+      GH_REPO: ${{ github.repository }}
+      NUMERO: ${{ github.event.issue.number }}
+    steps:
+      - name: Tirar "em andamento" e "aguardando responsável"
+        run: |
+          for etiqueta in "em andamento" "aguardando responsável"; do
+            gh issue edit "$NUMERO" --remove-label "$etiqueta" 2> /dev/null || echo "Sem a etiqueta: $etiqueta"
+          done

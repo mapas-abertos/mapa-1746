@@ -1,9 +1,11 @@
-# Revisão de dependências: roda a cada pull request.
+# Revisão de dependências: roda a cada pull request, só em repositório público
+# (no GitHub Free, a revisão de dependências não existe em repositório privado).
+#
 # Confere as bibliotecas e actions que o pull request acrescenta ou muda. Falha se alguma
 # tiver vulnerabilidade de gravidade alta ou crítica, ou licença que não combina com a MIT
-# do código para distribuir (GPL, AGPL, SSPL). Licenças permissivas comuns passam.
-# É exigido pela regra da main ("Proteger a main"), junto com os jobs do ci.yml.
-# Ao renomear o job, atualize a regra e o comentário do ci.yml.
+# deste projeto (GPL, AGPL, SSPL).
+# Precisa do Dependency graph ligado (Settings > Code security), senão falha.
+# Em repositório público, a regra "Proteger a main" exige este job verde.
 # Os logs são públicos: nunca imprima segredo nem dado bruto.
 
 name: Dependências
@@ -17,10 +19,11 @@ permissions:
 jobs:
   revisao:
     name: Revisão de dependências
+    if: github.event.repository.visibility == 'public'
     runs-on: ubuntu-latest
     steps:
-      - uses: actions/checkout@v5
-      - uses: actions/dependency-review-action@v4
+      - uses: actions/checkout@v7
+      - uses: actions/dependency-review-action@v5
         with:
           fail-on-severity: high
           deny-licenses: GPL-2.0-only, GPL-2.0-or-later, GPL-3.0-only, GPL-3.0-or-later, AGPL-3.0-only, AGPL-3.0-or-later, SSPL-1.0
