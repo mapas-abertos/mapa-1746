@@ -6,7 +6,7 @@ Feito a partir do modelo P3 da mentoria de IA da LOBO DE CARVALHO SOLUCOES LTDA.
 
 ## Fonte dos dados
 
-- Chamados do 1746 da Prefeitura do Rio de Janeiro, publicados no Data.Rio e lidos na tabela `datario.administracao_servicos_publicos.chamado_1746` do BigQuery.
+- Chamados do 1746 da Prefeitura do Rio de Janeiro, publicados no Data.Rio e lidos na tabela `datario.adm_central_atendimento_1746.chamado` do BigQuery.
 - Licença dos dados de origem: a definir (será conferida na fonte).
 - O mapa mostra só totais agregados por rua ou por quadrado de ~100 m. Chamado individual, coordenada exata e dado de pessoas não entram neste repositório.
 

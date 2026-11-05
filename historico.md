@@ -4,6 +4,10 @@
 >
 > Cada data é um título `## AAAA-MM-DD`. O CI confere a data e a ordem.
 
+## 2026-11-05
+
+- Issue #7: primeira ferramenta, o agregador (`src/agregador.py`). Lê a lista de chamados e grava `ruas.csv`, `quadrados.csv`, `quadrados.geojson` e `resumo.txt`: totais, atendidos, fechados e mediana de dias até fechar, por rua e bairro e por quadrado de 100 m da grade EPSG:31983. Mínimo configurável ("menos de N"), período opcional, mensagem com a coluna que falta. 30 testes em `testes/test_agregador.py`, com dados fictícios. Biblioteca nova: `pyproj` (e `certifi`, que ele usa). Saiu a ferramenta de exemplo do modelo. No `README.md`, a tabela da fonte passou a ser `datario.adm_central_atendimento_1746.chamado`.
+
 ## 2026-11-04
 
 - O check "Revisão de dependências" passou a ser obrigatório na regra "Proteger a main"; comentários do `ci.yml` e do `dependencias.yml` atualizados.

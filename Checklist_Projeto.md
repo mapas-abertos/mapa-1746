@@ -2,7 +2,7 @@
 
 Fonte de verdade do andamento. Marque `[x]` ao resolver e anote decisão e responsável na linha.
 
-**Última atualização:** 2026-11-04
+**Última atualização:** 2026-11-05
 
 ## Dados-chave
 
@@ -53,4 +53,4 @@ Ajustes porque o repositório é público (ver `decisoes.md`).
 
 A ordem da lista é a prioridade: o de cima é o próximo. O gestor mantém.
 
-- [ ] Primeira ferramenta: a definir (abrir como "Pedido de ferramenta") — _resp.: a definir_
+- [ ] Agregador: totais por rua e por quadrado de 100 m — issue #7; código e testes no pull request, falta a revisão do gestor e o teste manual. O valor do mínimo fica a definir até a consulta jurídica — _resp.: Guilherme_
