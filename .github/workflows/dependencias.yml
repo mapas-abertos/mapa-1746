@@ -2,8 +2,8 @@
 # Confere as bibliotecas e actions que o pull request acrescenta ou muda. Falha se alguma
 # tiver vulnerabilidade de gravidade alta ou crítica, ou licença que não combina com a MIT
 # do código para distribuir (GPL, AGPL, SSPL). Licenças permissivas comuns passam.
-# Não é exigido pela regra da main ("Proteger a main"): se passar a ser, atualize a regra
-# e o comentário do ci.yml. Ao renomear o job, atualize a regra.
+# É exigido pela regra da main ("Proteger a main"), junto com os jobs do ci.yml.
+# Ao renomear o job, atualize a regra e o comentário do ci.yml.
 # Os logs são públicos: nunca imprima segredo nem dado bruto.
 
 name: Dependências

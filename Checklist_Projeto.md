@@ -41,7 +41,7 @@ Ajustes porque o repositório é público (ver `decisoes.md`).
 - [x] Segurança: secret scanning com push protection, alertas do Dependabot e private vulnerability reporting ligados — _resp.: Guilherme, 04/11/2026_
 - [x] CodeQL (varredura de segurança do Python e dos workflows), Dependabot abrindo pull request de correção, regra "Proteger as versões" (tags `v*` não são apagadas nem reescritas), tópicos do repositório, Wiki e Projects desligados — _resp.: Guilherme, 04/11/2026_
 - [x] `SECURITY.md`, `CONTRIBUTING.md` e revisão de dependências no pull request — issue #3 — _resp.: Guilherme, 04/11/2026_
-- [ ] Decidir se o check "Revisão de dependências" entra como obrigatório na regra "Proteger a main" — _resp.: Guilherme_
+- [x] Decidir se o check "Revisão de dependências" entra como obrigatório na regra "Proteger a main" — obrigatório (ver `decisoes.md`) — _resp.: Guilherme, 04/11/2026_
 - [ ] Ao criar a atualização automática (workflow agendado): em repositório público, o GitHub pausa o agendamento depois de 60 dias sem atividade no repositório; prever como manter ativo e um aviso se parar — _resp.: Guilherme_
 - [x] Regras de dado público, neutralidade e logs públicos no `CLAUDE.md` e no `_referencias/LEIA-ME.md` — _resp.: Guilherme, 04/11/2026_
 - [x] `LICENSE` MIT (titular: Guilherme Lobo de Carvalho) e seção "Fonte dos dados" no `README.md` — _resp.: Guilherme, 04/11/2026_
