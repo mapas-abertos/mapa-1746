@@ -203,7 +203,8 @@ def verificar_mapa(raiz, arquivos, pastas):
 
     # Sentido 2: tudo que está no repositório aparece no mapa.
     for pasta in pastas:
-        if pasta not in nomes:
+        coberta = any(p.endswith("/") and casa_com_padrao(pasta, p) for p in padroes)
+        if pasta not in nomes and not coberta:
             erros.append(
                 f"A pasta `{pasta}` não aparece no map.md. "
                 f"O que fazer: acrescente uma linha \"- `{pasta}` — para que serve\"."

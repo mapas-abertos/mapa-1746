@@ -5,6 +5,10 @@
 .env.*
 !.env.example
 
+# Configuração pessoal do Claude Code e as pastas dos sub chats (worktrees)
+.claude/settings.local.json
+.claude/worktrees/
+
 # Dados que não podem ir para o GitHub (ver _referencias/LEIA-ME.md)
 dados/
 

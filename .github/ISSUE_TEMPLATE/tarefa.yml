@@ -1,0 +1,37 @@
+name: Tarefa de configuração ou documentação
+description: Trabalho que não é ferramenta, como ajustar o CI, uma configuração do GitHub, um guia ou os documentos de IA.
+title: "[Tarefa] "
+labels: ["tarefa"]
+body:
+  - type: markdown
+    attributes:
+      value: |
+        Para o que não é ferramenta nem defeito numa ferramenta. Ferramenta nova: use "Pedido de ferramenta".
+        Não cole senha, chave, dado pessoal nem dado real de cliente aqui.
+
+  - type: textarea
+    id: o_que
+    attributes:
+      label: O que precisa ser feito?
+      description: Em uma ou duas frases.
+    validations:
+      required: true
+
+  - type: textarea
+    id: por_que
+    attributes:
+      label: Por quê?
+      description: O que acontece hoje e atrapalha, ou de onde veio o pedido.
+    validations:
+      required: true
+
+  - type: textarea
+    id: quando_pronta
+    attributes:
+      label: Quando está pronta?
+      description: "O que você vai conferir para aprovar. Ex.: um arquivo diz tal coisa, um check fica verde, uma configuração aparece ligada na tela."
+      placeholder: |
+        - O guia explica o passo novo.
+        - O CI fica verde no pull request.
+    validations:
+      required: true

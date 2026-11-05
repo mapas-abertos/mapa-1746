@@ -1,0 +1,19 @@
+# Dependabot: abre pull request quando sai versão nova de uma action ou de uma biblioteca
+# fixada (requirements.txt e requirements-dev.txt). Uma vez por mês, para não encher a lista.
+# Cada pull request passa pelo CI como qualquer outro; o responsável aprova.
+
+version: 2
+updates:
+  - package-ecosystem: github-actions
+    directory: /
+    schedule:
+      interval: monthly
+    labels: ["tarefa"]
+    open-pull-requests-limit: 3
+
+  - package-ecosystem: pip
+    directory: /
+    schedule:
+      interval: monthly
+    labels: ["tarefa"]
+    open-pull-requests-limit: 3

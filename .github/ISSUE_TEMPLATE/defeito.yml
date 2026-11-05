@@ -8,7 +8,7 @@ body:
       value: |
         Para o que já funcionava e deixou de funcionar, ou nunca funcionou direito.
         Travou em outra coisa (instalação, Git, conta)? Use "Suporte do mentor".
-        Não cole senha, chave nem dado real de cliente aqui: use um exemplo fictício.
+        Não cole senha, chave, dado pessoal nem dado real de cliente aqui: use um exemplo fictício.
 
   - type: input
     id: ferramenta

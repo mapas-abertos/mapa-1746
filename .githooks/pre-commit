@@ -1,11 +1,23 @@
 #!/bin/sh
-# Barreira local: antes de cada commit, confere segredos e arquivos proibidos
-# no seu computador, antes de qualquer coisa ir para o GitHub.
+# Barreira local, antes de cada commit:
+# 1. nada de commit direto na main (tudo passa por branch e pull request);
+# 2. segredos e arquivos proibidos são barrados no seu computador, antes de irem para o GitHub.
 # Ligada uma vez por repositório com: git config core.hooksPath .githooks
 # Não pule esta barreira (git commit --no-verify).
 
-PY=python
-command -v "$PY" > /dev/null 2>&1 || PY=python3
+RAMO=$(git symbolic-ref --short HEAD 2> /dev/null)
+if [ "$RAMO" = "main" ]; then
+  echo "Commit direto na main barrado."
+  echo "O que fazer: crie um branch para a issue (ex.: git switch -c issue-12-nome-curto) e faça o commit lá."
+  exit 1
+fi
+
+# Python da .venv, se existir; senão, o do computador.
+if [ -x .venv/Scripts/python ]; then PY=.venv/Scripts/python
+elif [ -x .venv/bin/python ]; then PY=.venv/bin/python
+elif command -v python > /dev/null 2>&1; then PY=python
+else PY=python3
+fi
 
 if ! "$PY" verificacoes/segredos.py; then
   echo

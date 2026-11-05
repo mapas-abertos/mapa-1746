@@ -7,7 +7,7 @@ body:
     attributes:
       value: |
         Escreva como explicaria a um colega. O Claude transforma este pedido em teste e em código.
-        Não cole senha, chave nem dado real de cliente aqui: use um exemplo fictício.
+        Não cole senha, chave, dado pessoal nem dado real de cliente aqui: use um exemplo fictício.
 
   - type: textarea
     id: o_que_faz
