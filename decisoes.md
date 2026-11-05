@@ -4,6 +4,8 @@
 >
 > Formato: **Decisão em uma frase — DD/MM/AAAA.** O que motivou, opções consideradas e por que esta. Quem decidiu. Se revoga uma anterior, diga qual.
 
+- **Publicar (release) é separado de juntar (merge): a `main` é a versão aprovada e a `prod`, a versão em uso — 05/11/2026.** Veio com o modelo P3 `v2026.11.05.3`. A rotina Publicar versão, só a pedido do responsável, cria a versão, move a `prod` e chama a entrega automática; o `versao.yml` saiu. Quando o GitHub Pages for ligado (decisão abaixo), ele segue a `prod`, e não a `main`. Decidiu: o responsável.
+
 - **A revisão de dependências é obrigatória para o merge — 04/11/2026.** A regra "Proteger a main" passa a exigir o check "Revisão de dependências", além de "Documentos de IA" e "Código". Assim, nenhum pull request (inclusive os do Dependabot e os de quem é de fora) traz biblioteca ou action com vulnerabilidade alta ou crítica, ou com licença GPL, AGPL ou SSPL. A alternativa, deixar o check só como aviso, dependia de alguém ler o resultado. Decidiu: Guilherme.
 
 - **Credencial do BigQuery (só leitura) num environment restrito à `main`, e não num Secret solto — 04/11/2026.** Em repositório público, o GitHub Free oferece environments: só um workflow rodando na `main` lê a credencial, e um pull request vindo de fork não. Ainda não foi criada; entra quando a primeira ferramenta de coleta precisar. Decidiu: Guilherme.

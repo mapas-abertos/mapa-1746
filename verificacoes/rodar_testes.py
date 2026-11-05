@@ -31,7 +31,7 @@ def falta_teste(arquivos):
         return [
             f"Há código em src/ ({len(codigo)} arquivo(s)) e nenhum teste em testes/. "
             f"O que fazer: peça ao Claude o teste de cada ferramenta, a partir do "
-            f"\"Quando está pronta\" da issue, num arquivo testes/test_<nome>.py."
+            f"\"Quando está pronta\" do chamado (issue), num arquivo testes/test_<nome>.py."
         ]
     return []
 

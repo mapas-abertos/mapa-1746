@@ -1,8 +1,8 @@
 name: Suporte do mentor
-description: Só para o responsável do projeto. Travou em algo? Abra esta issue e o mentor é avisado.
+description: Só para o responsável do projeto. Travou em algo? Abra este chamado e o mentor é avisado.
 title: "[Suporte] "
 labels: ["suporte"]
-# Usuário do mentor no GitHub. Ele recebe a issue enquanto for membro da organização
+# Usuário do mentor no GitHub. Ele recebe o chamado enquanto for membro da organização
 # (ver docs/como_usar_este_modelo.md, passo 1).
 assignees: ["guilobocarvalho"]
 body:
@@ -17,7 +17,7 @@ body:
     id: fazendo
     attributes:
       label: O que você estava fazendo?
-      description: Qual ferramenta ou issue, e em que passo.
+      description: Qual ferramenta ou chamado, e em que passo.
     validations:
       required: true
 
@@ -32,7 +32,7 @@ body:
     id: aconteceu
     attributes:
       label: O que aconteceu?
-      description: Cole a mensagem de erro ou um print. Link do pull request ou da execução do CI, se houver.
+      description: Cole a mensagem de erro ou um print. Link do pedido de revisão (pull request) ou da conferência automática (CI), se houver.
     validations:
       required: true
 

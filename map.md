@@ -60,6 +60,7 @@ Cada pasta tem um `LEIA-ME.md` com as regras dela (menos as que começam com pon
 - `*/LEIA-ME.md` e `verificacoes/testes/LEIA-ME.md` — regras de cada pasta.
 - `src/exemplo.py` — ferramenta de exemplo (dias úteis entre duas datas); sai com a primeira ferramenta de verdade.
 - `testes/test_exemplo.py` — testes da ferramenta de exemplo.
+- `docs/glossario.md` — os nomes em português para o Git e o GitHub, com o termo em inglês.
 - `docs/como_usar_este_modelo.md` — passo a passo da primeira vez, do repositório vazio ao CI verde.
 - `docs/atualizar_do_modelo.md` — como o mentor traz as melhorias do modelo P3 para este repositório, por pull request.
 - `docs/papeis_dos_chats.md` — gestor (Opus) e operador (Sonnet, um sub chat por issue), com as frases de abertura.
@@ -72,12 +73,12 @@ Cada pasta tem um `LEIA-ME.md` com as regras dela (menos as que começam com pon
 - `verificacoes/comum.py` — funções usadas pelas verificações.
 - `verificacoes/testes/test_verificacoes.py` — um caso que passa e casos que falham para cada verificação.
 - `.github/workflows/ci.yml` — CI: documentos de IA e código, a cada pull request e na `main`.
-- `.github/workflows/versao.yml` — depois do CI verde na `main`, cria a tag com a data e o Release e chama o deploy.
+- `.github/workflows/publicar.yml` — Publicar versão (release): a pedido do responsável, confere a conferência automática, cria a versão, move a versão em uso (`prod`) e chama a entrega automática; também volta para uma versão anterior.
 - `.github/workflows/deploy.yml` — ponto de encaixe do CD; destino a definir.
 - `.github/workflows/dependencias.yml` — revisão de dependências a cada pull request: barra vulnerabilidade alta ou crítica e licença incompatível com a MIT.
 - `.github/workflows/issue_fechada.yml` — quando uma issue fecha, tira `em andamento` e `aguardando responsável`.
 - `.github/dependabot.yml` — pull request mensal com versão nova das actions e das bibliotecas fixadas.
-- `.github/rulesets/*.json` — `proteger_main.json` (pull request e CI verde obrigatórios) e `proteger_versoes.json` (tags `v*` não se apagam).
+- `.github/rulesets/*.json` — `proteger_main.json` (pull request e CI verde obrigatórios) e `proteger_versoes.json` (versões `v*` não se apagam) e `proteger_prod.json` (só a rotina de publicar mexe na `prod`).
 - `.github/workflows/etiquetas.yml` — cria as etiquetas das issues e apaga as padrão; rodar à mão, uma vez.
 - `.github/ISSUE_TEMPLATE/pedido_ferramenta.yml` — formulário "Pedido de ferramenta": o que faz, onde entra, quando está pronta.
 - `.github/ISSUE_TEMPLATE/defeito.yml` — formulário "Defeito numa ferramenta": o que fez, o que deveria acontecer, o que aconteceu.

@@ -1,8 +1,8 @@
 # Ponto de encaixe do CD (entrega contínua).
 #
 # Hoje não entrega nada: o destino de deploy está a definir (Checklist_Projeto.md).
-# É chamado pelo versao.yml depois de cada versão nova e também pode ser rodado à mão
-# em Actions > Deploy > Run workflow.
+# É chamado pelo publicar.yml a cada versão publicada e também pode ser rodado à mão
+# em Actions > Entrega automática (deploy) > Run workflow.
 #
 # Quando o destino for escolhido:
 # 1. troque o passo "Destino a definir" pelos passos de entrega do destino;
@@ -10,10 +10,12 @@
 #    e use como ${{ secrets.NOME_DA_CHAVE }} (ver docs/segredos_no_github.md);
 # 3. registre a escolha em decisoes.md.
 #
-# Fica num arquivo separado porque uma tag criada pelo próprio Actions não dispara
-# outro workflow sozinha; por isso o versao.yml chama este arquivo diretamente.
+# Fica num arquivo separado porque uma versão criada pela própria rotina não dispara
+# outra rotina sozinha; por isso o publicar.yml chama este arquivo diretamente.
+# Destino que segue uma linha de trabalho (pyRevit, GitHub Pages): use a prod, que é a
+# versão em uso, e não a main.
 
-name: Deploy
+name: Entrega automática (deploy)
 
 on:
   workflow_call:

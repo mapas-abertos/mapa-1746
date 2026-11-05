@@ -14,7 +14,7 @@ body:
     id: ferramenta
     attributes:
       label: Qual ferramenta?
-      description: O nome do botão ou do arquivo, ou o número da issue que pediu a ferramenta.
+      description: O nome do botão ou do arquivo, ou o número do chamado que pediu a ferramenta.
     validations:
       required: true
 
@@ -46,4 +46,4 @@ body:
     id: versao
     attributes:
       label: Versão em uso (se souber)
-      description: "Ex.: v2026.11.04. Está na página Releases do repositório."
+      description: "Ex.: v2026.11.04. Está na página Releases (versões) do projeto."

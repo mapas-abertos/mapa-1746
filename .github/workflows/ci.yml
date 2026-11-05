@@ -6,7 +6,7 @@
 # Ao renomear um job, atualize .github/rulesets/proteger_main.json. Em público, os logs
 # são públicos: nunca imprima segredo nem dado bruto.
 
-name: CI
+name: Conferência automática (CI)
 
 on:
   pull_request:

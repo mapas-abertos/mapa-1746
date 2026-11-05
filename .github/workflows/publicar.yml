@@ -1,0 +1,121 @@
+# Publicar versão (release): leva a versão aprovada (main) para a versão em uso (prod).
+#
+# Juntar à versão aprovada (merge) não publica nada. Publicar é um passo separado, que só
+# o responsável decide: Actions > Publicar versão (release) > Run workflow, ou pedindo ao
+# Claude "publique a versão" (ele pede confirmação antes de rodar).
+#
+# O que esta rotina faz:
+# 1. confere que a conferência automática (CI) está verde na versão aprovada;
+# 2. cria a versão com a data (v2026.11.05, e v2026.11.05.2 se houver outra no dia) e as
+#    notas dos pedidos de revisão que entraram desde a última;
+# 3. move a linha de trabalho prod para esse ponto (destinos que seguem uma linha de
+#    trabalho, como o pyRevit ou o GitHub Pages, seguem a prod);
+# 4. chama a entrega automática (deploy.yml).
+#
+# Voltar atrás: rode de novo com o nome de uma versão anterior no campo "versao". A prod
+# volta para ela e a entrega automática leva essa versão. Nenhuma versão nova é criada.
+#
+# Em projeto público, o ambiente "prod" pede a aprovação do responsável antes de rodar
+# (skill configurar-publico). Em privado, no GitHub Free, não há essa aprovação: vale a
+# confirmação do Claude e quem tem acesso ao projeto.
+
+name: Publicar versão (release)
+
+on:
+  workflow_dispatch:
+    inputs:
+      versao:
+        description: "Deixe vazio para publicar a versão aprovada de agora. Para voltar atrás, escreva uma versão anterior (ex.: v2026.11.04)."
+        required: false
+        type: string
+
+# Uma publicação de cada vez.
+concurrency: publicar
+
+jobs:
+  publicar:
+    name: Publicar
+    runs-on: ubuntu-latest
+    environment: prod
+    permissions:
+      contents: write # criar a versão e mover a prod
+      checks: read # conferir a conferência automática
+    outputs:
+      tag: ${{ steps.alvo.outputs.tag }}
+    env:
+      GH_TOKEN: ${{ github.token }}
+      VOLTAR_PARA: ${{ inputs.versao }}
+      # Fuso usado para a data da versão.
+      TZ: America/Sao_Paulo
+    steps:
+      - uses: actions/checkout@v5
+        with:
+          ref: main
+          fetch-depth: 0 # traz as versões que já existem
+
+      - name: Escolher o que publicar
+        id: alvo
+        run: |
+          if [ -n "$VOLTAR_PARA" ]; then
+            # Voltar atrás para uma versão que já existe.
+            if ! git rev-parse -q --verify "refs/tags/$VOLTAR_PARA" > /dev/null; then
+              echo "::error::A versão $VOLTAR_PARA não existe. Veja os nomes na página Releases."
+              exit 1
+            fi
+            COMMIT=$(git rev-list -n 1 "$VOLTAR_PARA")
+            echo "tag=$VOLTAR_PARA" >> "$GITHUB_OUTPUT"
+            echo "commit=$COMMIT" >> "$GITHUB_OUTPUT"
+            echo "nova=nao" >> "$GITHUB_OUTPUT"
+            echo "Voltando a versão em uso para $VOLTAR_PARA."
+            exit 0
+          fi
+
+          COMMIT=$(git rev-parse HEAD)
+          JA=$(git tag --points-at "$COMMIT" --list 'v*' | head -n 1)
+          if [ -n "$JA" ]; then
+            echo "::error::A versão aprovada de agora já foi publicada como $JA. Nada novo para publicar."
+            exit 1
+          fi
+
+          # A conferência automática precisa estar verde na versão aprovada.
+          VERDES=$(gh api "repos/$GITHUB_REPOSITORY/commits/$COMMIT/check-runs" \
+            --jq '[.check_runs[] | select(.name == "Documentos de IA" or .name == "Código") | select(.conclusion == "success")] | length')
+          if [ "$VERDES" != "2" ]; then
+            echo "::error::A conferência automática (CI) não está verde na versão aprovada. Espere terminar ou corrija antes de publicar."
+            exit 1
+          fi
+
+          DATA=$(date +%Y.%m.%d)
+          TAG="v$DATA"
+          N=1
+          while git rev-parse -q --verify "refs/tags/$TAG" > /dev/null; do
+            N=$((N + 1))
+            TAG="v$DATA.$N"
+          done
+          echo "tag=$TAG" >> "$GITHUB_OUTPUT"
+          echo "commit=$COMMIT" >> "$GITHUB_OUTPUT"
+          echo "nova=sim" >> "$GITHUB_OUTPUT"
+          echo "Publicando $TAG."
+
+      - name: Criar a versão (release)
+        if: steps.alvo.outputs.nova == 'sim'
+        env:
+          TAG: ${{ steps.alvo.outputs.tag }}
+          COMMIT: ${{ steps.alvo.outputs.commit }}
+        run: gh release create "$TAG" --target "$COMMIT" --title "$TAG" --generate-notes
+
+      - name: Mover a versão em uso (prod)
+        env:
+          COMMIT: ${{ steps.alvo.outputs.commit }}
+          TAG: ${{ steps.alvo.outputs.tag }}
+        run: |
+          git push --force origin "$COMMIT:refs/heads/prod"
+          echo "Versão em uso (prod): $TAG" | tee -a "$GITHUB_STEP_SUMMARY"
+
+  entregar:
+    name: Entregar a versão
+    needs: publicar
+    uses: ./.github/workflows/deploy.yml
+    with:
+      versao: ${{ needs.publicar.outputs.tag }}
+    secrets: inherit

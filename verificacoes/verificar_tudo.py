@@ -1,6 +1,6 @@
 """Roda todas as verificações, na mesma ordem do GitHub.
 
-Rode antes de cada push. Tudo OK aqui = conferência automática (CI) verde no GitHub.
+Rode antes de enviar para a nuvem (push). Tudo OK aqui = conferência automática (CI) verde no GitHub.
 
 Uso: python verificacoes/verificar_tudo.py
 """
@@ -39,7 +39,7 @@ def main():
     # No GitHub (CI) não há commit local; no seu computador, a barreira precisa estar ligada.
     if not os.environ.get("CI") and not barreira_local_ligada():
         print(
-            "AVISO - a barreira local de segredos está desligada neste computador.\n"
+            "AVISO - as travas do computador (hooks) estão desligadas.\n"
             "  O que fazer: rode git config core.hooksPath .githooks na pasta do repositório.\n"
         )
     falhas = 0
@@ -47,9 +47,9 @@ def main():
         falhas += mostrar(titulo, verificar(RAIZ))
     print()
     if falhas:
-        print(f"RESULTADO: {falhas} de {len(ETAPAS)} verificações com problema. Corrija antes do push.")
+        print(f"RESULTADO: {falhas} de {len(ETAPAS)} verificações com problema. Corrija antes de enviar para a nuvem (push).")
         return 1
-    print("RESULTADO: tudo certo. Pode fazer o push.")
+    print("RESULTADO: tudo certo. Pode enviar para a nuvem (push).")
     return 0
 
 
