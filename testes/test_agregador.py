@@ -425,6 +425,112 @@ def test_linha_de_comando_sem_periodo_conta_tudo(tmp_path):
     assert len(por_rua(saida)) == 4
 
 
+# ---- Mensagens da linha de comando, em português (teste manual do PR #8) --------------
+
+# Pedaços do texto padrão do argparse, em inglês, que não podem aparecer.
+INGLES = ("error:", "usage:", "the following arguments", "invalid", "expected", "unrecognized",
+          "options:", "show this help")
+
+
+def rodar_comando(tmp_path, capsys, *argumentos, com_entrada=True, com_saida=True):
+    """Roda a linha de comando e devolve (código de saída, mensagem de erro)."""
+    entrada = tmp_path / "chamados.csv"
+    entrada.write_text(LISTA_EXEMPLO, encoding="utf-8")
+    argv = [str(entrada)] if com_entrada else []
+    if com_saida:
+        argv += ["--saida", str(tmp_path / "saida")]
+    codigo = main(argv + list(argumentos))
+    return codigo, capsys.readouterr().err
+
+
+def confere_mensagem(codigo, mensagem, *trechos):
+    assert codigo != 0
+    assert "O que fazer:" in mensagem, mensagem
+    for trecho in trechos:
+        assert trecho in mensagem, mensagem
+    for ingles in INGLES:
+        assert ingles not in mensagem.lower(), f"mensagem em inglês: {mensagem}"
+
+
+def test_sem_minimo_diz_em_portugues_o_que_fazer(tmp_path, capsys):
+    codigo, mensagem = rodar_comando(tmp_path, capsys)
+    confere_mensagem(codigo, mensagem, "Falta o --minimo", "--minimo 5")
+
+
+def test_sem_saida_diz_em_portugues_o_que_fazer(tmp_path, capsys):
+    codigo, mensagem = rodar_comando(tmp_path, capsys, "--minimo", "5", com_saida=False)
+    confere_mensagem(codigo, mensagem, "Falta a --saida")
+
+
+def test_sem_arquivo_de_entrada_diz_em_portugues_o_que_fazer(tmp_path, capsys):
+    codigo, mensagem = rodar_comando(tmp_path, capsys, "--minimo", "5", com_entrada=False)
+    confere_mensagem(codigo, mensagem, "Falta o arquivo de entrada")
+
+
+def test_sem_nada_lista_tudo_o_que_falta(tmp_path, capsys):
+    codigo, mensagem = rodar_comando(tmp_path, capsys, com_entrada=False, com_saida=False)
+    confere_mensagem(codigo, mensagem, "arquivo de entrada", "--saida", "--minimo")
+
+
+def test_minimo_que_nao_e_numero_diz_em_portugues_o_que_fazer(tmp_path, capsys):
+    codigo, mensagem = rodar_comando(tmp_path, capsys, "--minimo", "cinco")
+    confere_mensagem(codigo, mensagem, "--minimo", "número inteiro")
+
+
+def test_minimo_menor_que_1_diz_em_portugues_o_que_fazer(tmp_path, capsys):
+    codigo, mensagem = rodar_comando(tmp_path, capsys, "--minimo", "0")
+    confere_mensagem(codigo, mensagem, "--minimo", "1 ou mais")
+
+
+def test_minimo_sem_valor_diz_em_portugues_o_que_fazer(tmp_path, capsys):
+    codigo, mensagem = rodar_comando(tmp_path, capsys, "--minimo")
+    confere_mensagem(codigo, mensagem, "--minimo")
+
+
+def test_data_inicial_invalida_diz_em_portugues_o_que_fazer(tmp_path, capsys):
+    codigo, mensagem = rodar_comando(tmp_path, capsys, "--minimo", "5", "--inicio", "01/05/2025")
+    confere_mensagem(codigo, mensagem, "--inicio", "AAAA-MM-DD")
+
+
+def test_data_final_invalida_diz_em_portugues_o_que_fazer(tmp_path, capsys):
+    codigo, mensagem = rodar_comando(tmp_path, capsys, "--minimo", "5", "--fim", "2025-13-40")
+    confere_mensagem(codigo, mensagem, "--fim", "AAAA-MM-DD")
+
+
+def test_periodo_ao_contrario_diz_em_portugues_o_que_fazer(tmp_path, capsys):
+    codigo, mensagem = rodar_comando(
+        tmp_path, capsys, "--minimo", "5", "--inicio", "2025-05-31", "--fim", "2025-05-01"
+    )
+    confere_mensagem(codigo, mensagem, "--fim")
+
+
+def test_opcao_desconhecida_diz_em_portugues_o_que_fazer(tmp_path, capsys):
+    codigo, mensagem = rodar_comando(tmp_path, capsys, "--minimo", "5", "--cor", "azul")
+    confere_mensagem(codigo, mensagem, "--cor")
+
+
+def test_arquivo_que_nao_existe_diz_em_portugues_o_que_fazer(tmp_path, capsys):
+    codigo = main([str(tmp_path / "nao_existe.csv"), "--saida", str(tmp_path / "s"), "--minimo", "5"])
+    confere_mensagem(codigo, capsys.readouterr().err, "nao_existe.csv")
+
+
+def test_arquivo_que_nao_esta_em_utf8_diz_em_portugues_o_que_fazer(tmp_path, capsys):
+    entrada = tmp_path / "chamados.csv"
+    entrada.write_bytes(LISTA_EXEMPLO.encode("latin-1"))
+    codigo = main([str(entrada), "--saida", str(tmp_path / "s"), "--minimo", "5"])
+    confere_mensagem(codigo, capsys.readouterr().err, "UTF-8")
+
+
+def test_ajuda_em_portugues(capsys):
+    with pytest.raises(SystemExit) as saida:
+        main(["--ajuda"])
+    assert saida.value.code == 0
+    ajuda = capsys.readouterr().out
+    assert "uso:" in ajuda and "--minimo" in ajuda and "--ajuda" in ajuda
+    for ingles in INGLES:
+        assert ingles not in ajuda.lower(), f"ajuda em inglês: {ingles}"
+
+
 # ---- README ---------------------------------------------------------------------------
 
 

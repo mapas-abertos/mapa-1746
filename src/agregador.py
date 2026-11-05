@@ -21,6 +21,7 @@ Uso, a partir da raiz do repositório:
 
     .venv/Scripts/python src/agregador.py dados/chamados.csv --saida dados/saida --minimo N
     (opcional) --inicio 2025-01-01 --fim 2025-12-31   conta só os chamados abertos nesse período
+    Para ver as opções: --ajuda
 
 O valor do mínimo fica a definir até a consulta jurídica; por isso não há padrão.
 """
@@ -212,9 +213,15 @@ def agregar(entrada, saida, *, minimo, inicio=None, fim=None):
     contando os dois. Devolve o Resumo.
     """
     if minimo < 1:
-        raise ValueError("O mínimo precisa ser 1 ou mais.")
+        raise ValueError(
+            "O --minimo precisa ser 1 ou mais. "
+            "O que fazer: informe o mínimo de chamados para mostrar o número, por exemplo --minimo 5."
+        )
     if inicio and fim and fim < inicio:
-        raise ValueError("A data final do período vem antes da inicial.")
+        raise ValueError(
+            "A data final do período (--fim) vem antes da inicial (--inicio). "
+            "O que fazer: confira as duas datas; o --fim tem de ser igual ou depois do --inicio."
+        )
 
     resumo = Resumo(minimo=minimo, inicio=inicio, fim=fim)
     ruas = defaultdict(Totais)
@@ -337,33 +344,150 @@ def _gravar_quadrados(saida, quadrados, minimo):
 # ---- Linha de comando -----------------------------------------------------------------
 
 
-def _data(texto):
+# Todas as mensagens saem em português, com "O que fazer". O argparse (a parte do Python
+# que lê a linha de comando) só fala inglês: por isso as opções obrigatórias são
+# conferidas aqui, os valores são lidos pelas funções abaixo, e o error() é trocado.
+
+VEJA_A_AJUDA = "veja as opções com python src/agregador.py --ajuda."
+
+# O que dizer quando falta cada parte obrigatória.
+FALTA = {
+    "entrada": (
+        "o arquivo de entrada",
+        "escreva o caminho da lista de chamados logo depois de agregador.py, "
+        "por exemplo dados/chamados.csv.",
+    ),
+    "saida": ("a --saida", "informe a pasta onde gravar os arquivos, por exemplo --saida dados/saida."),
+    "minimo": (
+        "o --minimo",
+        "informe o mínimo de chamados para mostrar o número, por exemplo --minimo 5.",
+    ),
+}
+
+# Exemplo de valor de cada opção, para as mensagens.
+EXEMPLO = {
+    "--saida": "--saida dados/saida",
+    "--minimo": "--minimo 5",
+    "--inicio": "--inicio 2025-01-01",
+    "--fim": "--fim 2025-12-31",
+}
+
+
+class ErroNaLinhaDeComando(Exception):
+    """Algo errado nas opções da linha de comando. A mensagem diz o que fazer."""
+
+
+class _Formatador(argparse.HelpFormatter):
+    def add_usage(self, usage, actions, groups, prefix=None):
+        super().add_usage(usage, actions, groups, "uso: " if prefix is None else prefix)
+
+
+class _LeitorDeOpcoes(argparse.ArgumentParser):
+    def error(self, message):
+        raise ErroNaLinhaDeComando(_traduzir(message))
+
+
+def _traduzir(mensagem):
+    """Põe em português os erros que o próprio argparse ainda pode dar."""
+    opcao, _, detalhe = mensagem.partition(": ")
+    if opcao.startswith("argument "):
+        opcao = opcao.removeprefix("argument ").split("/")[-1]
+        if "O que fazer:" in detalhe:  # veio de uma das funções de leitura abaixo
+            return detalhe
+        if "expected one argument" in detalhe:
+            exemplo = EXEMPLO.get(opcao, opcao)
+            return f"Falta o valor do {opcao}. O que fazer: escreva o valor logo depois, por exemplo {exemplo}."
+    if opcao == "unrecognized arguments":
+        return f"Não conheço {detalhe}. O que fazer: {VEJA_A_AJUDA}"
+    return f"Não entendi a linha de comando. O que fazer: {VEJA_A_AJUDA}"
+
+
+def _ler_minimo(texto):
     try:
-        return date.fromisoformat(texto)
+        minimo = int(texto)
     except ValueError:
-        raise argparse.ArgumentTypeError(f"\"{texto}\" não é uma data no formato AAAA-MM-DD") from None
+        raise argparse.ArgumentTypeError(
+            f"O --minimo tem de ser um número inteiro, e veio \"{texto}\". "
+            f"O que fazer: {FALTA['minimo'][1]}"
+        ) from None
+    if minimo < 1:
+        raise argparse.ArgumentTypeError(
+            f"O --minimo precisa ser 1 ou mais, e veio {minimo}. O que fazer: {FALTA['minimo'][1]}"
+        )
+    return minimo
+
+
+def _leitor_de_data(opcao):
+    def ler(texto):
+        try:
+            return date.fromisoformat(texto)
+        except ValueError:
+            raise argparse.ArgumentTypeError(
+                f"O {opcao} tem \"{texto}\", que não é uma data. "
+                f"O que fazer: use o formato AAAA-MM-DD, por exemplo {EXEMPLO[opcao]}."
+            ) from None
+    return ler
+
+
+def _leitor_de_opcoes():
+    leitor = _LeitorDeOpcoes(
+        prog="agregador.py",
+        usage="%(prog)s ENTRADA --saida PASTA --minimo N [--inicio AAAA-MM-DD] [--fim AAAA-MM-DD]",
+        description="Totais dos chamados do 1746 por rua e por quadrado de 100 m.",
+        formatter_class=_Formatador,
+        add_help=False,
+    )
+    arquivos = leitor.add_argument_group("arquivos")
+    arquivos.add_argument("entrada", nargs="?", metavar="ENTRADA", help="lista de chamados (CSV)")
+    arquivos.add_argument("--saida", metavar="PASTA", help="pasta onde gravar os arquivos")
+    opcoes = leitor.add_argument_group("opções")
+    opcoes.add_argument(
+        "--minimo", type=_ler_minimo, metavar="N",
+        help="rua ou quadrado com menos chamados que N sai como \"menos de N\"",
+    )
+    opcoes.add_argument("--inicio", type=_leitor_de_data("--inicio"), metavar="AAAA-MM-DD",
+                        help="primeiro dia do período (opcional)")
+    opcoes.add_argument("--fim", type=_leitor_de_data("--fim"), metavar="AAAA-MM-DD",
+                        help="último dia do período (opcional)")
+    opcoes.add_argument("-h", "--ajuda", action="help", help="mostra esta ajuda e sai")
+    return leitor
+
+
+def _ler_opcoes(argv):
+    opcoes = _leitor_de_opcoes().parse_args(argv)
+    faltam = [nome for nome in FALTA if getattr(opcoes, nome) is None]
+    if faltam:
+        raise ErroNaLinhaDeComando("\n".join(
+            f"Falta {FALTA[nome][0]}. O que fazer: {FALTA[nome][1]}" for nome in faltam
+        ))
+    return opcoes
 
 
 def main(argv=None):
-    parser = argparse.ArgumentParser(
-        description="Totais dos chamados do 1746 por rua e por quadrado de 100 m."
-    )
-    parser.add_argument("entrada", help="lista de chamados (CSV)")
-    parser.add_argument("--saida", required=True, help="pasta onde gravar os arquivos")
-    parser.add_argument(
-        "--minimo", required=True, type=int,
-        help="rua ou quadrado com menos chamados que isso sai como \"menos de N\"",
-    )
-    parser.add_argument("--inicio", type=_data, help="primeiro dia do período (AAAA-MM-DD)")
-    parser.add_argument("--fim", type=_data, help="último dia do período (AAAA-MM-DD)")
-    opcoes = parser.parse_args(argv)
+    try:
+        opcoes = _ler_opcoes(argv)
+    except ErroNaLinhaDeComando as erro:
+        for linha in str(erro).splitlines():
+            print(f"ERRO: {linha}", file=sys.stderr)
+        return 2
     try:
         resumo = agregar(
             opcoes.entrada, opcoes.saida,
             minimo=opcoes.minimo, inicio=opcoes.inicio, fim=opcoes.fim,
         )
     except FileNotFoundError:
-        print(f"ERRO: não achei o arquivo {opcoes.entrada}.", file=sys.stderr)
+        print(
+            f"ERRO: não achei o arquivo {opcoes.entrada}. "
+            f"O que fazer: confira o caminho e o nome do arquivo de entrada.",
+            file=sys.stderr,
+        )
+        return 1
+    except UnicodeDecodeError:
+        print(
+            "ERRO: o arquivo de entrada não está em UTF-8. "
+            "O que fazer: salve a lista de novo como \"CSV UTF-8\".",
+            file=sys.stderr,
+        )
         return 1
     except ValueError as erro:  # inclui EntradaInvalida
         print(f"ERRO: {erro}", file=sys.stderr)
