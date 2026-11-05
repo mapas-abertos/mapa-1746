@@ -54,3 +54,4 @@ Ajustes porque o repositório é público (ver `decisoes.md`).
 A ordem da lista é a prioridade: o de cima é o próximo. O gestor mantém.
 
 - [ ] Agregador: totais por rua e por quadrado de 100 m — issue #7; código e testes no pull request, falta a revisão do gestor e o teste manual. O valor do mínimo fica a definir até a consulta jurídica — _resp.: Guilherme_
+- [ ] Coleta: somar no BigQuery todos os chamados por rua e quadrado — issue #15; código e testes no pull request, falta a revisão do gestor e o teste manual com o login do Guilherme. Rodar pelo Actions fica para outra issue — _resp.: Guilherme_
