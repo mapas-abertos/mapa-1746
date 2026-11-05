@@ -1,8 +1,18 @@
 #!/bin/sh
-# Antes de cada push: roda todas as verificações (as mesmas do CI).
-# Com algum ERRO, o push não sai. Ligada junto com o pre-commit:
-# git config core.hooksPath .githooks
+# Trava do computador (hook), antes de enviar para a nuvem (push):
+# 1. nada de enviar direto para a versão em uso (prod): só a rotina Publicar versão mexe nela;
+# 2. roda todas as verificações (as mesmas da conferência automática). Com algum ERRO, o envio não sai.
+# Ligada junto com o pre-commit: git config core.hooksPath .githooks
 # Não pule esta barreira (git push --no-verify).
+
+# O git informa, uma linha por linha de trabalho enviada: ref local, sha local, ref remota, sha remoto.
+while read -r ref_local sha_local ref_remota sha_remoto; do
+  if [ "$ref_remota" = "refs/heads/prod" ]; then
+    echo "Envio para a versão em uso (prod) barrado."
+    echo "O que fazer: para publicar, use a rotina Publicar versão (release): peça ao Claude \"publique a versão\"."
+    exit 1
+  fi
+done
 
 # Python da .venv, se existir; senão, o do computador.
 if [ -x .venv/Scripts/python ]; then PY=.venv/Scripts/python
@@ -13,6 +23,6 @@ fi
 
 if ! "$PY" verificacoes/verificar_tudo.py; then
   echo
-  echo "Push barrado: corrija os ERROS acima e faça o push de novo."
+  echo "Envio para a nuvem (push) barrado: corrija os ERROS acima e envie de novo."
   exit 1
 fi

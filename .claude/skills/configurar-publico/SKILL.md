@@ -28,9 +28,15 @@ Rode só em repositório **público**. Antes de cada comando que muda o GitHub, 
    `gh api -X PUT repos/R/vulnerability-alerts` e `gh api -X PUT repos/R/automated-security-fixes`
 6. CodeQL padrão:
    `gh api -X PATCH repos/R/code-scanning/default-setup -f state=configured`
-7. Regra das versões (ninguém apaga nem reescreve uma tag `v*`; o workflow Versão continua criando):
+7. Regra das versões (ninguém apaga nem reescreve uma tag `v*`; a rotina Publicar versão continua criando):
    `gh api -X POST repos/R/rulesets --input .github/rulesets/proteger_versoes.json`
-8. Opcional, com o OK do mentor: desligar Wiki e Projects (`gh repo edit R --enable-wiki=false --enable-projects=false`) e pôr tópicos.
+8. Aprovação do responsável para publicar: ambiente `prod`, que só a `main` usa e que pede a aprovação dele (`ID` = `gh api users/<usuário do responsável> --jq .id`):
+   `gh api -X PUT repos/R/environments/prod --input -` com `{"reviewers": [{"type": "User", "id": ID}], "prevent_self_review": false, "deployment_branch_policy": {"protected_branches": false, "custom_branch_policies": true}}`
+   e `gh api -X POST repos/R/environments/prod/deployment-branch-policies -f name=main`
+9. Regra da versão em uso (só a rotina Publicar versão mexe na `prod`):
+   `gh api -X POST repos/R/rulesets --input .github/rulesets/proteger_prod.json`
+   A conferir no primeiro projeto: se a rotina for barrada ao mover a `prod`, a liberação para o GitHub Actions no arquivo (`bypass_actors`) não valeu; tire a regra (`gh api -X DELETE repos/R/rulesets/<id>`) e fique com as travas do computador e a aprovação do passo 8.
+10. Opcional, com o OK do mentor: desligar Wiki e Projects (`gh repo edit R --enable-wiki=false --enable-projects=false`) e pôr tópicos.
 
 ## Depois
 

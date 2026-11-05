@@ -6,7 +6,7 @@ body:
   - type: markdown
     attributes:
       value: |
-        Obrigado por ajudar. Esta issue é pública: qualquer pessoa vê o que você escrever.
+        Obrigado por ajudar. Este chamado é público: qualquer pessoa vê o que você escrever.
         Não cole dado pessoal (nome, telefone, e-mail, endereço), senha nem chave.
         Falha de segurança não vai aqui: veja o SECURITY.md.
 
