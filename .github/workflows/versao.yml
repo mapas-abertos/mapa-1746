@@ -36,7 +36,7 @@ jobs:
       # Fuso usado para a data da versão.
       TZ: America/Sao_Paulo
     steps:
-      - uses: actions/checkout@v5
+      - uses: actions/checkout@v7
         with:
           fetch-depth: 0 # traz as tags que já existem
 
