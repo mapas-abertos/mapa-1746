@@ -311,7 +311,9 @@ def _o_que_fica_de_fora(resumo):
             f"{contagem} {verbo} rua e não entram na tabela por rua; "
             f"se têm coordenada, aparecem no mapa."
         )
-    fora = _numero_do_resumo(resumo, "coordenada fora do município")
+    fora = _numero_do_resumo(
+        resumo, "dos quais com coordenada fora do município", "coordenada fora do município"
+    )
     if fora is not None:
         itens.append(
             f"{_milhar(fora)} chamados com coordenada fora do município do Rio foram descartados "
