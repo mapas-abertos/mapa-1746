@@ -22,16 +22,35 @@ from pyproj import Transformer
 
 import coleta
 from agregador import agregar
-from coleta import BIGQUERY, Dialeto, LimiteExcedido, coletar, main, montar_consultas
+from coleta import (
+    BIGQUERY,
+    CLASSIFICACAO_PADRAO,
+    Dialeto,
+    LimiteExcedido,
+    ListaInvalida,
+    coletar,
+    ler_classificacao,
+    main,
+    montar_consultas,
+)
 from test_agregador import EXEMPLO_DA_ISSUE, LISTA_EXEMPLO
 
 RAIZ = Path(__file__).resolve().parent.parent
 
 CABECALHO_RUAS = ["bairro", "rua", "chamados", "atendidos", "fechados", "mediana_dias_ate_fechar"]
 CABECALHO_QUADRADOS = ["quadrado", "chamados", "atendidos", "fechados", "mediana_dias_ate_fechar"]
-COLUNAS_DO_RESUMO = ["lidos", "sem_rua", "rua_fora_do_cadastro", "sem_coordenada",
+COLUNAS_DO_RESUMO = ["lidos", "problema_publico", "sem_rua", "rua_fora_do_cadastro", "sem_coordenada",
                      "coordenada_fora_do_municipio", "mais_recente"]
 COLUNAS_DO_DESENHO = ["bairro", "rua", "desenho"]
+COLUNAS_POR_SUBTIPO = ["tipo", "subtipo", "chamados"]
+
+# Classificação fictícia dos três pares da lista de exemplo: todos de problema público,
+# para os testes que já existiam (antes da issue #26) continuarem com os mesmos totais.
+CLASSIFICACAO_DO_EXEMPLO = {
+    ("Iluminação Pública", "Reparo de lâmpada apagada"): "publico",
+    ("Limpeza", "Remoção de entulho"): "publico",
+    ("Conservação", "Tapa-buraco"): "publico",
+}
 
 # Colunas do chamado que nunca podem sair do BigQuery.
 COLUNAS_PROIBIDAS = {"latitude", "longitude", "id_chamado", "numero_logradouro", "x", "y"}
@@ -58,6 +77,8 @@ DUCKDB = Dialeto(
     # Sem a extensão de mapas, o município de teste é uma caixa em volta do Rio.
     contorno="MIN({coluna})",
     dentro="({lon} BETWEEN -43.80 AND -43.09 AND {lat} BETWEEN -23.09 AND -22.74)",
+    texto=lambda valor: "'" + valor.replace("'", "''") + "'",
+    pares="(VALUES {linhas}) AS pares(tipo, subtipo)",
 )
 
 
@@ -176,12 +197,14 @@ class ClienteFalso:
         return Trabalho(Resultado(linhas, colunas))
 
 
-def rodar(tmp_path, texto=LISTA_EXEMPLO, minimo=5, *, cliente=None, **opcoes):
+def rodar(tmp_path, texto=LISTA_EXEMPLO, minimo=5, *, cliente=None,
+          classificacao=CLASSIFICACAO_DO_EXEMPLO, **opcoes):
     cliente = cliente or ClienteFalso(montar_base(texto))
     saida = tmp_path / "coleta"
     avisos = []
     resumo = coletar(
-        cliente, saida, minimo=minimo, dialeto=DUCKDB, hoje=HOJE, avisar=avisos.append, **opcoes
+        cliente, saida, minimo=minimo, classificacao=classificacao, dialeto=DUCKDB, hoje=HOJE,
+        avisar=avisos.append, **opcoes
     )
     return resumo, saida, cliente, avisos
 
@@ -303,7 +326,7 @@ def test_resumo_sem_chamado_fora_do_municipio_mostra_zero(tmp_path):
 
 
 def test_bigquery_confere_o_ponto_contra_o_contorno_dos_bairros():
-    consulta = montar_consultas(BIGQUERY)["quadrados"]
+    consulta = montar_consultas(BIGQUERY, CLASSIFICACAO_DO_EXEMPLO)["quadrados"]
     assert "ST_UNION_AGG(geometry) AS contorno" in consulta
     assert "FROM `datario.dados_mestres.bairro`" in consulta.split("AS contorno")[1].split(")")[0]
     # Longitude antes da latitude, e uma coordenada impossível vira "fora", sem erro.
@@ -389,7 +412,7 @@ def test_conta_de_metros_erra_menos_de_um_milimetro():
 
 
 def test_a_conta_conferida_e_a_que_esta_na_consulta_do_bigquery():
-    consulta = montar_consultas(BIGQUERY)["quadrados"]
+    consulta = montar_consultas(BIGQUERY, CLASSIFICACAO_DO_EXEMPLO)["quadrados"]
     for nome, expressao in coleta.PASSOS_METROS:
         assert f"{expressao} AS {nome}" in consulta, f"o passo {nome} não está na consulta"
 
@@ -412,12 +435,13 @@ def test_pontos_perto_da_borda_caem_no_mesmo_quadrado_que_no_agregador(tmp_path)
 
 def test_cada_consulta_devolve_so_as_colunas_do_formato_de_saida(tmp_path):
     _, _, cliente, _ = rodar(tmp_path)
-    consultas = montar_consultas(DUCKDB)
+    consultas = montar_consultas(DUCKDB, CLASSIFICACAO_DO_EXEMPLO)
     esperadas = {
         "ruas": CABECALHO_RUAS,
         "quadrados": CABECALHO_QUADRADOS,
         "resumo": COLUNAS_DO_RESUMO,
         "desenho_das_ruas": COLUNAS_DO_DESENHO,
+        "por_subtipo": COLUNAS_POR_SUBTIPO,
     }
     assert set(consultas) == set(esperadas)
     for nome, colunas in esperadas.items():
@@ -427,7 +451,7 @@ def test_cada_consulta_devolve_so_as_colunas_do_formato_de_saida(tmp_path):
 
 
 def test_desenho_das_ruas_nao_le_a_tabela_de_chamados():
-    consulta = montar_consultas(BIGQUERY)["desenho_das_ruas"]
+    consulta = montar_consultas(BIGQUERY, CLASSIFICACAO_DO_EXEMPLO)["desenho_das_ruas"]
     assert "adm_central_atendimento_1746" not in consulta
     assert "latitude" not in consulta and "longitude" not in consulta
 
@@ -502,20 +526,20 @@ def test_rua_sem_desenho_fica_so_no_csv(tmp_path):
 def test_simulacao_vem_antes_de_tudo_e_mostra_os_gb(tmp_path):
     _, _, cliente, avisos = rodar(tmp_path)
     tipos = [tipo for tipo, _, _ in cliente.eventos]
-    assert tipos == ["simulação"] * 4 + ["consulta"] * 4
-    for _, _, configuracao in cliente.eventos[:4]:
+    assert tipos == ["simulação"] * 5 + ["consulta"] * 5
+    for _, _, configuracao in cliente.eventos[:5]:
         assert configuracao.use_query_cache is False
-    # 4 consultas de 0,5 GB cada.
-    assert any("2,0 GB" in aviso for aviso in avisos), avisos
+    # 5 consultas de 0,5 GB cada.
+    assert any("2,5 GB" in aviso for aviso in avisos), avisos
 
 
 def test_para_antes_de_rodar_se_passar_do_limite(tmp_path):
     cliente = ClienteFalso(montar_base(LISTA_EXEMPLO), bytes_por_consulta=3 * GIB)
     with pytest.raises(LimiteExcedido) as erro:
         rodar(tmp_path, cliente=cliente, limite_gb=10)
-    assert "12,0 GB" in str(erro.value) and "10" in str(erro.value)
+    assert "15,0 GB" in str(erro.value) and "10" in str(erro.value)
     assert "O que fazer:" in str(erro.value)
-    assert [tipo for tipo, _, _ in cliente.eventos] == ["simulação"] * 4
+    assert [tipo for tipo, _, _ in cliente.eventos] == ["simulação"] * 5
     assert not (tmp_path / "coleta").exists()
 
 
@@ -535,7 +559,7 @@ def test_limite_vem_da_linha_de_comando(tmp_path, capsys):
     )
     assert codigo != 0
     erro = capsys.readouterr().err
-    assert "12,0 GB" in erro and "11" in erro
+    assert "15,0 GB" in erro and "11" in erro
     assert not (tmp_path / "s").exists()
 
 
@@ -551,8 +575,8 @@ def test_limite_menor_que_1_gb_aparece_como_foi_pedido(tmp_path):
     cliente = ClienteFalso(montar_base(LISTA_EXEMPLO), bytes_por_consulta=1024**2)
     with pytest.raises(LimiteExcedido) as erro:
         rodar(tmp_path, cliente=cliente, limite_gb=0.001)
-    # 4 consultas de 1 MB cada: 0,0039 GB, acima de 0,001 GB.
-    assert "0,0039 GB" in str(erro.value) and "limite de 0,001 GB" in str(erro.value)
+    # 5 consultas de 1 MB cada: 0,0049 GB, acima de 0,001 GB.
+    assert "0,0049 GB" in str(erro.value) and "limite de 0,001 GB" in str(erro.value)
 
 
 def test_limite_com_virgula_ou_ponto_pela_linha_de_comando(tmp_path, capsys):
@@ -706,3 +730,321 @@ def test_ajuda_em_portugues(capsys):
     assert "uso:" in ajuda and "--minimo" in ajuda and "--limite-gb" in ajuda
     for ingles in INGLES:
         assert ingles not in ajuda.lower(), f"ajuda em inglês: {ingles}"
+
+
+# ---- Só problema público (issue #26) --------------------------------------------------
+
+# Cada par tipo/subtipo do 1746 está num grupo da lista de classificação. Por privacidade,
+# só o grupo "publico" entra no mapa. Os pares e os chamados daqui são fictícios.
+
+CABECALHO_DA_LISTA = "grupo;tipo;subtipo;motivo"
+GRUPOS = {"publico", "denuncia", "pessoal", "sem_lugar", "a_revisar"}
+
+CLASSIFICACAO_FICTICIA = {
+    ("Iluminação Pública", "Reparo de lâmpada apagada"): "publico",
+    ("Estacionamento Irregular", "Carro na calçada"): "denuncia",
+    ("Remoção Gratuita", "Móveis da casa"): "pessoal",
+    ("Informação", "Horário de atendimento"): "sem_lugar",
+    ("Tipo Em Revisão", "Subtipo em revisão"): "a_revisar",
+}
+
+
+def chamado(tipo, subtipo, *, rua="Rua A", latitude="-22.90668", longitude="-43.173317"):
+    """Uma linha de chamado fictício no formato da lista de exemplo."""
+    return (f"2025-03-01 08:00;2025-03-02 08:00;{tipo};{subtipo};Atendido;Centro;{rua};"
+            f"{latitude};{longitude}\n")
+
+
+def lista_de_chamados(*grupos_de_linhas):
+    return LISTA_EXEMPLO.splitlines()[0] + "\n" + "".join(grupos_de_linhas)
+
+
+def escrever_lista(tmp_path, texto, nome="lista.csv"):
+    caminho = tmp_path / nome
+    caminho.write_text(texto, encoding="utf-8")
+    return caminho
+
+
+def texto_do_resumo(saida):
+    return (saida / "resumo.txt").read_text(encoding="utf-8")
+
+
+def test_exemplo_da_issue_26_a_rua_sai_so_com_os_chamados_de_problema_publico(tmp_path):
+    # 3 de iluminação (publico), 2 de estacionamento irregular (denuncia) e 1 subtipo novo.
+    texto = lista_de_chamados(
+        chamado("Iluminação Pública", "Reparo de lâmpada apagada") * 3,
+        chamado("Estacionamento Irregular", "Carro na calçada") * 2,
+        chamado("Tipo Novo", "Subtipo novo"),
+    )
+    resumo, saida, _, _ = rodar(tmp_path, texto, minimo=1, classificacao=CLASSIFICACAO_FICTICIA)
+    linhas = (saida / "ruas.csv").read_text(encoding="utf-8").splitlines()
+    assert linhas[1:] == ["Centro;Rua A;3;3;3;1.0"]
+    assert sum(int(q["chamados"]) for q in ler_csv(saida / "quadrados.csv")) == 3
+    texto_resumo = texto_do_resumo(saida)
+    assert "denuncia: 2" in texto_resumo
+    assert "sem classificação: 1" in texto_resumo
+    assert resumo.problema_publico == 3
+
+
+def chamados_dos_cinco_grupos_e_sem_classificacao():
+    return lista_de_chamados(
+        chamado("Iluminação Pública", "Reparo de lâmpada apagada") * 3,
+        chamado("Estacionamento Irregular", "Carro na calçada") * 2,
+        chamado("Remoção Gratuita", "Móveis da casa", rua="Rua B") * 4,
+        chamado("Informação", "Horário de atendimento", latitude="", longitude="") * 1,
+        chamado("Tipo Em Revisão", "Subtipo em revisão") * 5,
+        chamado("Tipo Novo", "Subtipo novo") * 4,
+        chamado("Outro Tipo Novo", "Outro subtipo", rua="") * 2,
+    )
+
+
+def test_so_os_chamados_de_problema_publico_entram_nas_ruas_e_nos_quadrados(tmp_path):
+    _, saida, _, _ = rodar(tmp_path, chamados_dos_cinco_grupos_e_sem_classificacao(), minimo=1,
+                           classificacao=CLASSIFICACAO_FICTICIA)
+    ruas = ler_csv(saida / "ruas.csv")
+    assert [(r["rua"], r["chamados"]) for r in ruas] == [("Rua A", "3")]
+    quadrados = ler_csv(saida / "quadrados.csv")
+    assert sum(int(q["chamados"]) for q in quadrados) == 3
+    geojson = ler_json(saida / "ruas.geojson")
+    assert [f["properties"]["rua"] for f in geojson["features"]] == ["Rua A"]
+
+
+def test_resumo_diz_quantos_ficaram_fora_do_mapa_em_cada_grupo(tmp_path):
+    resumo, saida, _, _ = rodar(tmp_path, chamados_dos_cinco_grupos_e_sem_classificacao(),
+                                minimo=1, classificacao=CLASSIFICACAO_FICTICIA)
+    assert resumo.lidos == 21
+    assert resumo.problema_publico == 3
+    assert resumo.fora_do_mapa == {"denuncia": 2, "pessoal": 4, "sem_lugar": 1, "a_revisar": 5,
+                                   "sem classificação": 6}
+    texto = texto_do_resumo(saida)
+    for trecho in ("chamados lidos: 21", "chamados de problema público (entram no mapa): 3",
+                   "denuncia: 2", "pessoal: 4", "sem_lugar: 1", "a_revisar: 5",
+                   "sem classificação: 6"):
+        assert trecho in texto, f"o resumo não traz \"{trecho}\""
+
+
+def test_resumo_lista_os_pares_sem_classificacao_para_completar_a_lista(tmp_path):
+    resumo, saida, _, _ = rodar(tmp_path, chamados_dos_cinco_grupos_e_sem_classificacao(),
+                                minimo=1, classificacao=CLASSIFICACAO_FICTICIA)
+    assert resumo.sem_classificacao == [("Tipo Novo", "Subtipo novo", 4),
+                                        ("Outro Tipo Novo", "Outro subtipo", 2)]
+    texto = texto_do_resumo(saida)
+    assert "pares tipo/subtipo sem classificação: 2" in texto
+    # Do que tem mais chamados para o que tem menos.
+    assert texto.index("- Tipo Novo / Subtipo novo: 4") < texto.index(
+        "- Outro Tipo Novo / Outro subtipo: 2")
+    # Os pares "a_revisar" já estão na lista: não entram nesta relação.
+    assert "Tipo Em Revisão" not in texto
+
+
+def test_resumo_sem_par_sem_classificacao_mostra_zero(tmp_path):
+    _, saida, _, _ = rodar(tmp_path)
+    texto = texto_do_resumo(saida)
+    assert "sem classificação: 0" in texto
+    assert "pares tipo/subtipo sem classificação: 0" in texto
+
+
+def test_sem_rua_e_sem_coordenada_contam_so_os_chamados_de_problema_publico(tmp_path):
+    texto = lista_de_chamados(
+        chamado("Iluminação Pública", "Reparo de lâmpada apagada") * 3,
+        chamado("Iluminação Pública", "Reparo de lâmpada apagada", rua="", latitude="",
+                longitude=""),
+        chamado("Estacionamento Irregular", "Carro na calçada", rua="", latitude="",
+                longitude="") * 5,
+    )
+    resumo, saida, _, _ = rodar(tmp_path, texto, minimo=1, classificacao=CLASSIFICACAO_FICTICIA)
+    assert resumo.sem_rua == 1 and resumo.sem_coordenada == 1
+    total = sum(int(q["chamados"]) for q in ler_csv(saida / "quadrados.csv"))
+    assert total == resumo.problema_publico - resumo.sem_coordenada == 3
+    assert "entre os chamados de problema público:" in texto_do_resumo(saida)
+
+
+def test_a_filtragem_acontece_dentro_do_bigquery():
+    consultas = montar_consultas(BIGQUERY, CLASSIFICACAO_FICTICIA)
+    for nome in ("ruas", "quadrados", "resumo"):
+        consulta = consultas[nome]
+        assert "('Iluminação Pública', 'Reparo de lâmpada apagada')" in consulta, nome
+        for outro in ("Estacionamento Irregular", "Remoção Gratuita", "Informação",
+                      "Tipo Em Revisão"):
+            assert outro not in consulta, f"a consulta {nome} traz o par {outro}"
+        assert "UNNEST(ARRAY<STRUCT<tipo STRING, subtipo STRING>>[" in consulta
+    # A consulta por subtipo só soma: tipo, subtipo e quantos chamados.
+    assert "GROUP BY" in consultas["por_subtipo"]
+    assert "latitude" not in consultas["por_subtipo"]
+
+
+def test_compara_tipo_e_subtipo_sem_os_espacos_do_comeco_e_do_fim(tmp_path):
+    # Na lista há tipos com espaço no fim ("Acessibilidade Digital "); na tabela pode haver
+    # também, ou não. A comparação tira os espaços dos dois lados.
+    caminho = escrever_lista(tmp_path, "\n".join([
+        CABECALHO_DA_LISTA,
+        "publico;Acessibilidade Digital ;Locais disponíveis;espaço ou serviço público",
+        "publico;Iluminação Pública; Reparo de lâmpada apagada ;espaço ou serviço público",
+        "denuncia;Estacionamento Irregular;Carro na calçada;aponta uma pessoa",
+    ]) + "\n")
+    classificacao = ler_classificacao(caminho)
+    assert ("Acessibilidade Digital", "Locais disponíveis") in classificacao
+    texto = lista_de_chamados(
+        chamado("Acessibilidade Digital", "Locais disponíveis"),
+        chamado("  Acessibilidade Digital  ", "Locais disponíveis "),
+        chamado("Iluminação Pública ", "Reparo de lâmpada apagada"),
+        chamado("Estacionamento Irregular   ", "  Carro na calçada"),
+    )
+    resumo, saida, _, _ = rodar(tmp_path, texto, minimo=1, classificacao=classificacao)
+    assert resumo.problema_publico == 3
+    assert resumo.fora_do_mapa["denuncia"] == 1
+    assert resumo.fora_do_mapa["sem classificação"] == 0
+    assert ler_csv(saida / "ruas.csv")[0]["chamados"] == "3"
+
+
+def test_par_que_so_se_repete_pelos_espacos_conta_uma_vez(tmp_path):
+    caminho = escrever_lista(tmp_path, "\n".join([
+        CABECALHO_DA_LISTA,
+        "publico;Transporte Escolar; Inclusão de Veículo;espaço ou serviço público",
+        "publico;Transporte Escolar;Inclusão de Veículo;espaço ou serviço público",
+    ]) + "\n")
+    classificacao = ler_classificacao(caminho)
+    assert classificacao == {("Transporte Escolar", "Inclusão de Veículo"): "publico"}
+    texto = lista_de_chamados(chamado("Transporte Escolar", "Inclusão de Veículo"))
+    _, saida, _, _ = rodar(tmp_path, texto, minimo=1, classificacao=classificacao)
+    assert ler_csv(saida / "ruas.csv")[0]["chamados"] == "1"
+
+
+APOSTROFO = chr(39)
+BARRA = chr(92)
+
+
+def test_subtipo_com_apostrofo_funciona(tmp_path):
+    subtipo = f"Benefício {APOSTROFO}causa mortis{APOSTROFO}"
+    classificacao = {("Táxi", subtipo): "publico"}
+    texto = lista_de_chamados(chamado("Táxi", subtipo) * 2)
+    resumo, _, _, _ = rodar(tmp_path, texto, minimo=1, classificacao=classificacao)
+    assert resumo.problema_publico == 2
+    # No BigQuery, o apóstrofo vai com barra invertida antes, e a barra invertida também.
+    assert BIGQUERY.texto(f"OPM{APOSTROFO}s") == f"{APOSTROFO}OPM{BARRA}{APOSTROFO}s{APOSTROFO}"
+    assert BIGQUERY.texto(f"a{BARRA}b") == f"{APOSTROFO}a{BARRA}{BARRA}b{APOSTROFO}"
+
+
+def test_chamado_sem_subtipo_fica_sem_classificacao(tmp_path):
+    texto = lista_de_chamados(chamado("Iluminação Pública", ""))
+    resumo, _, _, _ = rodar(tmp_path, texto, minimo=1, classificacao=CLASSIFICACAO_FICTICIA)
+    assert resumo.problema_publico == 0
+    assert resumo.sem_classificacao == [("Iluminação Pública", "", 1)]
+
+
+class ClienteQueNaoBate(ClienteFalso):
+    """Devolve um chamado a mais na contagem por subtipo, como se a conta não batesse."""
+
+    def query(self, sql, job_config=None):
+        trabalho = super().query(sql, job_config)
+        resultado = trabalho._resultado
+        if resultado is not None and [c.name for c in resultado.schema] == COLUNAS_POR_SUBTIPO:
+            resultado[0]["chamados"] += 1
+        return trabalho
+
+
+def test_coleta_para_se_a_conta_por_grupo_nao_bate_com_a_do_mapa(tmp_path):
+    cliente = ClienteQueNaoBate(montar_base(LISTA_EXEMPLO))
+    with pytest.raises(ValueError, match="não bate") as erro:
+        rodar(tmp_path, cliente=cliente)
+    assert "O que fazer:" in str(erro.value)
+    assert not (tmp_path / "coleta").exists()
+
+
+def test_consultas_com_a_lista_de_verdade_cabem_no_limite_do_bigquery():
+    # O BigQuery aceita consultas de até 1.024 mil caracteres.
+    classificacao = ler_classificacao(CLASSIFICACAO_PADRAO)
+    for nome, consulta in montar_consultas(BIGQUERY, classificacao).items():
+        assert len(consulta) < 1_000_000, nome
+
+
+# ---- A lista de classificação: no repositório e lida pela coleta ----------------------
+
+
+def test_lista_de_classificacao_esta_no_repositorio_com_os_cinco_grupos():
+    assert CLASSIFICACAO_PADRAO.is_relative_to(RAIZ / "_referencias")
+    assert CLASSIFICACAO_PADRAO.exists()
+    assert b"\r" not in CLASSIFICACAO_PADRAO.read_bytes()
+    classificacao = ler_classificacao(CLASSIFICACAO_PADRAO)
+    assert set(classificacao.values()) == GRUPOS
+    assert len(classificacao) > 5000
+
+
+def test_coleta_le_a_lista_do_repositorio_por_padrao(tmp_path, monkeypatch):
+    # Uma lista fictícia em que só tapa-buraco é de problema público.
+    lista = escrever_lista(tmp_path, "\n".join([
+        CABECALHO_DA_LISTA,
+        "publico;Conservação;Tapa-buraco;espaço ou serviço público",
+        "pessoal;Limpeza;Remoção de entulho;pedido da própria casa",
+    ]) + "\n")
+    monkeypatch.setattr(coleta, "CLASSIFICACAO_PADRAO", lista)
+    cliente = ClienteFalso(montar_base(LISTA_EXEMPLO))
+    saida = tmp_path / "s"
+    codigo = main(["--projeto", "p", "--minimo", "1", "--saida", str(saida)],
+                  abrir=lambda projeto: cliente, dialeto=DUCKDB)
+    assert codigo == 0
+    assert [(r["bairro"], r["rua"]) for r in ler_csv(saida / "ruas.csv")] == [("Tijuca", "Rua A")]
+
+
+def test_lista_pode_vir_de_outro_arquivo_pela_linha_de_comando(tmp_path):
+    lista = escrever_lista(tmp_path, "\n".join([
+        CABECALHO_DA_LISTA, "publico;Limpeza;Remoção de entulho;espaço ou serviço público",
+    ]) + "\n")
+    cliente = ClienteFalso(montar_base(LISTA_EXEMPLO))
+    saida = tmp_path / "s"
+    codigo = main(["--projeto", "p", "--minimo", "1", "--saida", str(saida),
+                   "--classificacao", str(lista)], abrir=lambda projeto: cliente, dialeto=DUCKDB)
+    assert codigo == 0
+    assert {r["rua"] for r in ler_csv(saida / "ruas.csv")} == {"Rua B"}
+
+
+LISTAS_MALFORMADAS = {
+    "vazia": ("", "cabeçalho"),
+    "cabeçalho errado": ("grupo;tipo;subtipo\npublico;A;B\n", "cabeçalho"),
+    "coluna a menos": (f"{CABECALHO_DA_LISTA}\npublico;A;B;x\npublico;C;D\n", "linha 3"),
+    "grupo desconhecido": (f"{CABECALHO_DA_LISTA}\npublica;A;B;x\n", "publica"),
+    "tipo vazio": (f"{CABECALHO_DA_LISTA}\npublico; ;B;x\n", "linha 2"),
+    "par em dois grupos": (
+        f"{CABECALHO_DA_LISTA}\npublico;A;B;x\ndenuncia;A ;B;y\n", "linhas 2 e 3"),
+    "sem nenhum par publico": (f"{CABECALHO_DA_LISTA}\ndenuncia;A;B;x\n", "publico"),
+}
+
+
+@pytest.mark.parametrize("caso", LISTAS_MALFORMADAS)
+def test_lista_malformada_para_a_coleta_e_diz_o_que_fazer(tmp_path, caso):
+    texto, trecho = LISTAS_MALFORMADAS[caso]
+    caminho = escrever_lista(tmp_path, texto)
+    with pytest.raises(ListaInvalida) as erro:
+        ler_classificacao(caminho)
+    assert trecho in str(erro.value)
+    assert "O que fazer:" in str(erro.value)
+
+
+def test_lista_que_nao_esta_em_utf8_diz_o_que_fazer(tmp_path):
+    caminho = tmp_path / "lista.csv"
+    caminho.write_bytes(f"{CABECALHO_DA_LISTA}\npublico;Iluminação;Lâmpada;x\n".encode("cp1252"))
+    with pytest.raises(ListaInvalida) as erro:
+        ler_classificacao(caminho)
+    assert "UTF-8" in str(erro.value) and "O que fazer:" in str(erro.value)
+
+
+def test_sem_a_lista_a_coleta_para_antes_de_abrir_o_bigquery(tmp_path, capsys):
+    codigo, mensagem = rodar_comando(capsys, "--projeto", "p", "--minimo", "5",
+                                     "--classificacao", str(tmp_path / "nao_existe.csv"))
+    confere_mensagem(codigo, mensagem, "lista de classificação", "nao_existe.csv")
+
+
+def test_pagina_de_metodo_le_o_resumo_que_a_coleta_grava(tmp_path):
+    # As duas pontas juntas: o resumo da coleta, com os grupos, lido pelo montador do site.
+    from montar_site import montar_site
+
+    _, saida, _, _ = rodar(tmp_path, chamados_dos_cinco_grupos_e_sem_classificacao(), minimo=1,
+                           classificacao=CLASSIFICACAO_FICTICIA)
+    site = tmp_path / "site"
+    montar_site(saida, site)
+    pagina = re.sub(r"\s+", " ", re.sub(r"<[^>]+>", " ", (site / "metodo.html").read_text(
+        encoding="utf-8")))
+    assert "Dos 21 chamados lidos, 3 (14,3%) são de problema público" in pagina
+    assert "Denúncia, que pode apontar vizinho, carro, obra, estabelecimento ou imóvel: 2 chamados" in pagina
+    assert "Subtipo que não está na lista de classificação: 6 chamados" in pagina
+    assert "LGPD" in pagina

@@ -41,6 +41,7 @@
 Cada pasta tem um `LEIA-ME.md` com as regras dela (menos as que começam com ponto).
 
 - `_referencias/` — originais e insumos que explicam de onde veio o trabalho.
+- `_referencias/20261106_classificacao_subtipos/` — lista de classificação dos tipos e subtipos do 1746 (issue #26).
 - `src/` — código das ferramentas.
 - `testes/` — testes automáticos das ferramentas.
 - `docs/` — guias para o responsável e para o Claude.
@@ -62,8 +63,10 @@ Cada pasta tem um `LEIA-ME.md` com as regras dela (menos as que começam com pon
 - `testes/test_agregador.py` — testes do agregador, com uma lista de chamados fictícia.
 - `src/montar_site.py` — montador do site (issue #16): lê as saídas do agregador e grava o mapa, a página de método e as tabelas para baixar numa pasta que abre no computador.
 - `testes/test_montar_site.py` — testes do montador do site, com os chamados fictícios do agregador.
-- `src/coleta.py` — coleta (issue #15): soma no BigQuery os chamados por rua e por quadrado de 100 m e grava os arquivos do agregador, mais o desenho das ruas (`ruas.geojson`).
+- `src/coleta.py` — coleta (issue #15): soma no BigQuery os chamados por rua e por quadrado de 100 m e grava os arquivos do agregador, mais o desenho das ruas (`ruas.geojson`). Desde a issue #26, só soma os chamados de problema público e diz no resumo quantos ficaram fora por grupo.
 - `testes/test_coleta.py` — testes da coleta: as consultas rodam no DuckDB, com dados fictícios, e a conta de metros é conferida contra o pyproj.
+- `_referencias/20261106_classificacao_subtipos/grupos_subtipos_1746.csv` — lista de classificação (`grupo;tipo;subtipo;motivo`): cada par tipo/subtipo do 1746 num grupo; só o `publico` entra no mapa (issue #26).
+- `_referencias/20261106_classificacao_subtipos/LEIA-ME.md` — de onde veio a lista de classificação, os grupos e como ela muda.
 - `docs/glossario.md` — os nomes em português para o Git e o GitHub, com o termo em inglês.
 - `docs/como_usar_este_modelo.md` — passo a passo da primeira vez, do repositório vazio ao CI verde.
 - `docs/atualizar_do_modelo.md` — como o mentor traz as melhorias do modelo P3 para este repositório, por pull request.
