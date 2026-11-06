@@ -60,6 +60,8 @@ Cada pasta tem um `LEIA-ME.md` com as regras dela (menos as que começam com pon
 - `*/LEIA-ME.md` e `verificacoes/testes/LEIA-ME.md` — regras de cada pasta.
 - `src/agregador.py` — agregador (issue #7): lê a lista de chamados e grava os totais por rua (`ruas.csv`) e por quadrado de 100 m (`quadrados.csv`, `quadrados.geojson`), com o resumo.
 - `testes/test_agregador.py` — testes do agregador, com uma lista de chamados fictícia.
+- `src/montar_site.py` — montador do site (issue #16): lê as saídas do agregador e grava o mapa, a página de método e as tabelas para baixar numa pasta que abre no computador.
+- `testes/test_montar_site.py` — testes do montador do site, com os chamados fictícios do agregador.
 - `src/coleta.py` — coleta (issue #15): soma no BigQuery os chamados por rua e por quadrado de 100 m e grava os arquivos do agregador, mais o desenho das ruas (`ruas.geojson`).
 - `testes/test_coleta.py` — testes da coleta: as consultas rodam no DuckDB, com dados fictícios, e a conta de metros é conferida contra o pyproj.
 - `docs/glossario.md` — os nomes em português para o Git e o GitHub, com o termo em inglês.
@@ -92,4 +94,4 @@ Cada pasta tem um `LEIA-ME.md` com as regras dela (menos as que começam com pon
 
 ## Status atual
 
-- Ferramentas: agregador (issue #7) e coleta no BigQuery (issue #15, em revisão). Próximo: o mapa.
+- Ferramentas: agregador (issue #7), coleta no BigQuery (issue #15, na versão aprovada) e montador do site (issue #16, em revisão). Próximos: publicar o mapa (depois do OK do advogado) e o desenho das ruas.
