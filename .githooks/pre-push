@@ -14,6 +14,11 @@ while read -r ref_local sha_local ref_remota sha_remoto; do
   fi
 done
 
+# O git passa para a trava o endereço do repositório (GIT_DIR e outros). As verificações
+# acham o repositório sozinhas; herdado, esse endereço faz o git init dos testes
+# reinicializar o repositório de verdade (core.bare = true). Issue #20.
+unset GIT_DIR GIT_WORK_TREE GIT_INDEX_FILE
+
 # Python da .venv, se existir; senão, o do computador.
 if [ -x .venv/Scripts/python ]; then PY=.venv/Scripts/python
 elif [ -x .venv/bin/python ]; then PY=.venv/bin/python
