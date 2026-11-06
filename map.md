@@ -78,7 +78,7 @@ Cada pasta tem um `LEIA-ME.md` com as regras dela (menos as que começam com pon
 - `verificacoes/testes/test_verificacoes.py` — um caso que passa e casos que falham para cada verificação.
 - `.github/workflows/ci.yml` — CI: documentos de IA e código, a cada pull request e na `main`.
 - `.github/workflows/publicar.yml` — Publicar versão (release): a pedido do responsável, confere a conferência automática, cria a versão, move a versão em uso (`prod`) e chama a entrega automática; também volta para uma versão anterior.
-- `.github/workflows/deploy.yml` — ponto de encaixe do CD; destino a definir.
+- `.github/workflows/deploy.yml` — entrega automática: baixa os dados agregados da versão de dados mais recente (`dados-AAAA-MM-DD`, anexo `coleta.zip`), monta o site e publica no GitHub Pages (issue #22).
 - `.github/workflows/dependencias.yml` — revisão de dependências a cada pull request: barra vulnerabilidade alta ou crítica e licença incompatível com a MIT.
 - `.github/workflows/issue_fechada.yml` — quando uma issue fecha, tira `em andamento` e `aguardando responsável`.
 - `.github/dependabot.yml` — pull request mensal com versão nova das actions e das bibliotecas fixadas.

@@ -29,7 +29,7 @@ Passo a passo em `docs/como_usar_este_modelo.md`.
 - [x] Criar a `.venv` e ligar a barreira local (`git config core.hooksPath .githooks`) em cada computador que clonar o repositório — feito no computador do Guilherme — _resp.: Guilherme, 04/11/2026_
 - [x] Rodar o workflow **Etiquetas** (Actions › Etiquetas › Run workflow) e conferir as cinco etiquetas — _resp.: mentor, 04/11/2026_
 - [x] Primeira rodada de `python verificacoes/verificar_tudo.py` no computador e CI verde no GitHub — _resp.: Guilherme, 04/11/2026_
-- [ ] Definir o destino de deploy e preencher o `.github/workflows/deploy.yml` — destino escolhido: GitHub Pages (ver `decisoes.md`); preencher e ligar só depois do OK do advogado — _resp.: Guilherme_
+- [x] Definir o destino de deploy e preencher o `.github/workflows/deploy.yml` — GitHub Pages, publicado em 05/11/2026 sem esperar o advogado, com os dados num anexo de versão (issue #22, ver `decisoes.md`) — _resp.: Guilherme_
 - [ ] No fim da mentoria, decidir se o mentor sai da organização — _resp.: a definir_
 
 ### 1b. Repositório público
@@ -46,13 +46,13 @@ Ajustes porque o repositório é público (ver `decisoes.md`).
 - [x] Regras de dado público, neutralidade e logs públicos no `CLAUDE.md` e no `_referencias/LEIA-ME.md` — _resp.: Guilherme, 04/11/2026_
 - [x] `LICENSE` MIT (titular: Guilherme Lobo de Carvalho) e seção "Fonte dos dados" no `README.md` — _resp.: Guilherme, 04/11/2026_
 - [ ] Conferir no Data.Rio a licença dos dados do 1746 e trocar o "a definir" do `README.md` — _resp.: Guilherme_
-- [ ] Consulta jurídica antes de publicar o site (licença dos dados, risco de identificar pessoas, texto da página de método) — _resp.: Guilherme_
+- [ ] Consulta jurídica (licença dos dados, risco de identificar pessoas, texto da página de método, valor do mínimo). Desde 05/11/2026 não trava mais a publicação: o site já está no ar (issue #22) — _resp.: Guilherme_
 - [ ] Credencial do BigQuery, só leitura: criar num environment restrito à `main` (Settings › Environments), nunca num Secret solto, quando a primeira ferramenta de coleta precisar. Nenhuma credencial criada até agora — _resp.: Guilherme_
 
 ### 2. Ferramentas
 
 A ordem da lista é a prioridade: o de cima é o próximo. O gestor mantém.
 
-- [ ] Agregador: totais por rua e por quadrado de 100 m — issue #7; código e testes no pull request, falta a revisão do gestor e o teste manual. O valor do mínimo fica a definir até a consulta jurídica — _resp.: Guilherme_
-- [ ] Mapa v1: quadrados coloridos, tabelas para baixar e página de método — issue #16; código e testes no pull request, falta a revisão do gestor e o teste manual (abrir o site no computador e no celular). Só monta o site numa pasta; publicar (GitHub Pages) fica para depois do OK do advogado — _resp.: Guilherme_
+- [x] Agregador: totais por rua e por quadrado de 100 m — issue #7, PR #8 (05/11/2026). O valor do mínimo fica a definir até a consulta jurídica — _resp.: Guilherme_
+- [x] Mapa v1: quadrados coloridos, tabelas para baixar e página de método — issue #16, PR #19 (05/11/2026). Publicado no GitHub Pages pela issue #22 — _resp.: Guilherme_
 - [ ] Coleta: somar no BigQuery todos os chamados por rua e quadrado — issue #15; código e testes no pull request, falta a revisão do gestor e o teste manual com o login do Guilherme. Rodar pelo Actions fica para outra issue — _resp.: Guilherme_

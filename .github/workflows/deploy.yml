@@ -1,19 +1,15 @@
-# Ponto de encaixe do CD (entrega contínua).
+# Entrega automática (CD): publica o site do mapa no GitHub Pages.
 #
-# Hoje não entrega nada: o destino de deploy está a definir (Checklist_Projeto.md).
 # É chamado pelo publicar.yml a cada versão publicada e também pode ser rodado à mão
 # em Actions > Entrega automática (deploy) > Run workflow.
 #
-# Quando o destino for escolhido:
-# 1. troque o passo "Destino a definir" pelos passos de entrega do destino;
-# 2. guarde as chaves do destino em Settings > Secrets and variables > Actions
-#    e use como ${{ secrets.NOME_DA_CHAVE }} (ver docs/segredos_no_github.md);
-# 3. registre a escolha em decisoes.md.
+# De onde vêm os dados: a coleta roda no computador do responsável (src/coleta.py) e
+# os totais (só agregados) vão como anexo "coleta.zip" de uma versão de dados, com o
+# nome dados-AAAA-MM-DD. Esta entrega baixa o anexo da versão de dados mais recente,
+# monta o site com o src/montar_site.py da versão publicada e o publica no Pages.
+# Nenhum arquivo grande entra no código. Ver decisoes.md (issue #22).
 #
-# Fica num arquivo separado porque uma versão criada pela própria rotina não dispara
-# outra rotina sozinha; por isso o publicar.yml chama este arquivo diretamente.
-# Destino que segue uma linha de trabalho (pyRevit, GitHub Pages): use a prod, que é a
-# versão em uso, e não a main.
+# O Pages do repositório usa a origem "GitHub Actions" (Settings > Pages).
 
 name: Entrega automática (deploy)
 
@@ -33,18 +29,59 @@ on:
 
 permissions:
   contents: read
+  pages: write
+  id-token: write
+
+# Uma entrega de cada vez; a que está em andamento termina.
+concurrency:
+  group: pages
+  cancel-in-progress: false
 
 jobs:
   deploy:
     name: Deploy
     runs-on: ubuntu-latest
+    environment:
+      name: github-pages
+      url: ${{ steps.publicar.outputs.page_url }}
     steps:
       - uses: actions/checkout@v7
         with:
           ref: ${{ inputs.versao }}
 
-      - name: Destino a definir
+      - uses: actions/setup-python@v7
+        with:
+          python-version: "3.12"
+
+      - name: Baixar os dados agregados (versão de dados mais recente)
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          DADOS=$(gh release list --limit 100 --json tagName,createdAt \
+            --jq '[.[] | select(.tagName | startswith("dados-"))] | sort_by(.createdAt) | last | .tagName')
+          if [ -z "$DADOS" ] || [ "$DADOS" = "null" ]; then
+            echo "::error::Não há versão de dados (dados-AAAA-MM-DD) com o anexo coleta.zip."
+            exit 1
+          fi
+          gh release download "$DADOS" --pattern coleta.zip --dir entrada
+          unzip -q entrada/coleta.zip -d entrada
+          echo "Dados: $DADOS" | tee -a "$GITHUB_STEP_SUMMARY"
+
+      - name: Montar o site
+        run: python src/montar_site.py entrada --saida _site
+
+      - uses: actions/configure-pages@v5
+
+      - uses: actions/upload-pages-artifact@v3
+        with:
+          path: _site
+
+      - name: Publicar no Pages
+        id: publicar
+        uses: actions/deploy-pages@v4
+
+      - name: Endereço
         env:
           VERSAO: ${{ inputs.versao }}
-        run: |
-          echo "Versão $VERSAO pronta. Destino de deploy a definir: nada foi entregue." | tee -a "$GITHUB_STEP_SUMMARY"
+          URL: ${{ steps.publicar.outputs.page_url }}
+        run: echo "Versão $VERSAO publicada em $URL" | tee -a "$GITHUB_STEP_SUMMARY"
