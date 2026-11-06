@@ -59,6 +59,21 @@ FRASE_DA_COR = (
 TABELA_DE_ORIGEM = "datario.adm_central_atendimento_1746.chamado"
 LINK_DATA_RIO = "https://data.rio/"
 LINK_DO_CODIGO = "https://github.com/mapas-abertos/mapa-1746"
+LINK_DA_LISTA = (
+    f"{LINK_DO_CODIGO}/blob/main/"
+    "_referencias/20261106_classificacao_subtipos/grupos_subtipos_1746.csv"
+)
+
+# Só problema público, por privacidade (issue #26). A linha do resumo da coleta com os que
+# entram no mapa e, na ordem da página, cada grupo que fica de fora, com o nome na página.
+CAMPO_DO_PROBLEMA_PUBLICO = "chamados de problema público (entram no mapa)"
+GRUPOS_FORA_DO_MAPA = [
+    ("denuncia", "Denúncia, que pode apontar vizinho, carro, obra, estabelecimento ou imóvel"),
+    ("pessoal", "Pedido pessoal, da própria casa ou da pessoa"),
+    ("sem_lugar", "Sem lugar (informação, tributo ou documento)"),
+    ("a_revisar", "A revisar (subtipos que ainda vão ser classificados)"),
+    ("sem classificação", "Subtipo que não está na lista de classificação"),
+]
 
 # Biblioteca do mapa por CDN, com a versão fixa. O "integrity" faz o navegador recusar o
 # arquivo se ele mudar. Trocar a versão: calcule o hash novo do arquivo e troque os dois.
@@ -292,11 +307,17 @@ def _o_que_fica_de_fora(resumo):
     """Itens da página de método sobre os chamados que não entram no mapa nem na tabela por rua.
 
     Lê do resumo.txt: chamados lidos (ou contados), sem coordenada, sem rua e, se a coleta
-    gravar, coordenada fora do município. O que o resumo não traz não aparece.
+    gravar, coordenada fora do município. O que o resumo não traz não aparece. Se o resumo
+    traz os chamados de problema público (issue #26), a conta é sobre eles.
     """
-    total = _numero_do_resumo(resumo, "contados", "chamados lidos")
+    publicos = _numero_do_resumo(resumo, CAMPO_DO_PROBLEMA_PUBLICO)
     itens = []
-    base = f"Dos {_milhar(total)} chamados lidos, " if total is not None else ""
+    if publicos is not None:
+        total = publicos
+        base = f"Dos {_milhar(total)} chamados de problema público, "
+    else:
+        total = _numero_do_resumo(resumo, "contados", "chamados lidos")
+        base = f"Dos {_milhar(total)} chamados lidos, " if total is not None else ""
     sem_coordenada = _numero_do_resumo(resumo, "sem coordenada")
     if sem_coordenada is not None:
         contagem, verbo = _quantos(sem_coordenada, _porcentagem(sem_coordenada, total or 0))
@@ -322,12 +343,66 @@ def _o_que_fica_de_fora(resumo):
     return "\n".join(f"      <li>{html.escape(item)}</li>" for item in itens)
 
 
+def _o_que_o_mapa_mostra(so_problema_publico):
+    if so_problema_publico:
+        filtro = ("só os chamados de problema público: problema em espaço ou serviço público, "
+                  "como iluminação, buraco, limpeza, árvore, drenagem, semáforo e ônibus")
+    else:
+        filtro = "todos os chamados da base, sem filtro"
+    return (
+        f"O total de chamados do 1746 do Rio de Janeiro em cada quadrado de 100 m por 100 m, "
+        f"somando {filtro}. Um toque num quadrado mostra os números dele: chamados, atendidos, "
+        f"fechados, ainda abertos (chamados menos fechados) e a mediana de dias até fechar."
+    )
+
+
+def _por_que_so_problema_publico(resumo):
+    """A seção da página de método sobre o filtro de privacidade, ou "" se o resumo não traz.
+
+    Diz o motivo, quantos chamados entram no mapa e quantos ficaram fora em cada grupo.
+    """
+    publicos = _numero_do_resumo(resumo, CAMPO_DO_PROBLEMA_PUBLICO)
+    if publicos is None:
+        return ""
+    total = _numero_do_resumo(resumo, "chamados lidos")
+    if total is not None:
+        porcentagem = _porcentagem(publicos, total)
+        conta = f" ({porcentagem})" if porcentagem else ""
+        entram = (f"Dos {_milhar(total)} chamados lidos, {_milhar(publicos)}{conta} são de "
+                  f"problema público e entram no mapa e na tabela por rua.")
+    else:
+        entram = (f"{_milhar(publicos)} chamados são de problema público e entram no mapa "
+                  f"e na tabela por rua.")
+    itens = []
+    for grupo, rotulo in GRUPOS_FORA_DO_MAPA:
+        quantos = _numero_do_resumo(resumo, grupo)
+        if quantos is not None:
+            contagem, _ = _quantos(quantos, _porcentagem(quantos, total or 0))
+            itens.append(f"      <li>{html.escape(rotulo)}: {html.escape(contagem)}.</li>")
+    fora = ""
+    if itens:
+        fora = "\n    <p>Ficaram de fora do mapa:</p>\n    <ul>\n" + "\n".join(itens) + "\n    </ul>"
+    return f"""
+    <h2>Por que só problema público</h2>
+    <p>Por privacidade, como pede a Lei Geral de Proteção de Dados (LGPD): o mapa não pode
+    apontar uma pessoa, uma casa ou um estabelecimento. Um quadrado com chamados de denúncia ou
+    de pedido pessoal poderia fazer isso. Os chamados de problema público falam do espaço e do
+    serviço público, e não de quem mora ali.</p>
+    <p>{html.escape(entram)}</p>{fora}
+    <p>Cada par tipo/subtipo do 1746 está num grupo, numa lista aberta:
+    <a href="{LINK_DA_LISTA}">lista de classificação</a>. Um subtipo novo fica fora do mapa
+    até ser classificado.</p>
+"""
+
+
 def _pagina_de_metodo(minimo, resumo):
     mais_recente = _data_do_resumo(
         resumo, "chamado mais recente na base", "chamado mais recente", "data do chamado mais recente"
     )
     coleta = _data_do_resumo(resumo, "data da coleta", "coleta")
     fora_do_mapa = _o_que_fica_de_fora(resumo)
+    privacidade = _por_que_so_problema_publico(resumo)
+    o_que_mostra = _o_que_o_mapa_mostra(bool(privacidade))
     return f"""<!doctype html>
 <html lang="pt-BR">
 <head>
@@ -342,11 +417,8 @@ def _pagina_de_metodo(minimo, resumo):
     <h1>Método e fonte</h1>
 
     <h2>O que o mapa mostra</h2>
-    <p>O total de chamados do 1746 do Rio de Janeiro em cada quadrado de 100 m por 100 m,
-    somando todos os chamados da base, sem filtro. Um toque num quadrado mostra os números dele:
-    chamados, atendidos, fechados, ainda abertos (chamados menos fechados) e a mediana de dias
-    até fechar.</p>
-
+    <p>{html.escape(o_que_mostra)}</p>
+{privacidade}
     <h2>O que a cor quer dizer</h2>
     <p>{html.escape(FRASE_DA_COR)}</p>
     <p>Os quadrados cinza têm menos de {minimo} chamados: o número não é mostrado.</p>

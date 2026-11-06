@@ -416,6 +416,105 @@ def test_metodo_diz_a_definir_quando_o_resumo_nao_traz_as_datas(tmp_path):
     assert re.search(r"coleta[^.]*a definir", pagina, re.IGNORECASE)
 
 
+# ---- Só problema público, por privacidade (issue #26) ---------------------------------
+
+# Números inventados, no formato do resumo da coleta depois da issue #26.
+RESUMO_SO_PROBLEMA_PUBLICO = """Resumo da coleta (chamados do 1746)
+fonte: datario.adm_central_atendimento_1746.chamado (BigQuery, só leitura)
+período: todos
+chamados lidos: 9500000
+chamados de problema público (entram no mapa): 3590000
+fora do mapa, por grupo:
+  denuncia: 2000000
+  pessoal: 1500000
+  sem_lugar: 1200000
+  a_revisar: 1000000
+  sem classificação: 210000
+pares tipo/subtipo sem classificação: 2
+  - Tipo Novo / Subtipo novo: 200000
+  - Outro Tipo / Outro subtipo: 10000
+entre os chamados de problema público:
+sem rua: 718000
+  dos quais com rua fora do cadastro de logradouros: 10
+sem coordenada: 359000
+  dos quais com coordenada fora do município: 1000
+chamado mais recente na base: 2026-11-05
+data da coleta: 2026-11-06
+ruas: 30000
+quadrados: 100000
+mínimo para mostrar o número: 5
+"""
+
+LINK_DA_LISTA = (
+    "https://github.com/mapas-abertos/mapa-1746/blob/main/"
+    "_referencias/20261106_classificacao_subtipos/grupos_subtipos_1746.csv"
+)
+
+
+def test_metodo_diz_que_o_mapa_mostra_so_problema_publico(tmp_path):
+    pagina = montar_com_resumo(tmp_path, RESUMO_SO_PROBLEMA_PUBLICO)
+    assert "só os chamados de problema público" in pagina
+    assert "iluminação, buraco, limpeza, árvore, drenagem, semáforo e ônibus" in pagina
+    assert "sem filtro" not in pagina
+
+
+def test_metodo_diz_por_que_privacidade(tmp_path):
+    pagina = montar_com_resumo(tmp_path, RESUMO_SO_PROBLEMA_PUBLICO)
+    assert "privacidade" in pagina.lower()
+    assert "LGPD" in pagina
+    assert "não pode apontar uma pessoa, uma casa ou um estabelecimento" in pagina
+
+
+def test_metodo_diz_quantos_entram_no_mapa_e_quantos_ficaram_fora_em_cada_grupo(tmp_path):
+    pagina = montar_com_resumo(tmp_path, RESUMO_SO_PROBLEMA_PUBLICO)
+    # 3.590.000 de 9.500.000 = 37,8%.
+    assert "Dos 9.500.000 chamados lidos, 3.590.000 (37,8%) são de problema público" in pagina
+    for trecho in (
+        "Denúncia, que pode apontar vizinho, carro, obra, estabelecimento ou imóvel: "
+        "2.000.000 chamados (21,1%)",
+        "Pedido pessoal, da própria casa ou da pessoa: 1.500.000 chamados (15,8%)",
+        "Sem lugar (informação, tributo ou documento): 1.200.000 chamados (12,6%)",
+        "A revisar (subtipos que ainda vão ser classificados): 1.000.000 chamados (10,5%)",
+        "Subtipo que não está na lista de classificação: 210.000 chamados (2,2%)",
+    ):
+        assert trecho in pagina, trecho
+
+
+def test_metodo_aponta_para_a_lista_de_classificacao(tmp_path):
+    pasta = agregado(tmp_path)
+    (pasta / "resumo.txt").write_text(RESUMO_SO_PROBLEMA_PUBLICO, encoding="utf-8")
+    site = tmp_path / "site"
+    montar_site(pasta, site)
+    assert f'href="{LINK_DA_LISTA}"' in texto(site, "metodo.html")
+
+
+def test_metodo_conta_sem_coordenada_e_sem_rua_sobre_os_chamados_de_problema_publico(tmp_path):
+    pagina = montar_com_resumo(tmp_path, RESUMO_SO_PROBLEMA_PUBLICO)
+    # 359.000 de 3.590.000 = 10,0%; 718.000 de 3.590.000 = 20,0%.
+    assert ("Dos 3.590.000 chamados de problema público, 359.000 chamados (10,0%) não têm "
+            "coordenada e não aparecem no mapa") in pagina
+    assert "718.000 chamados (20,0%) não têm rua" in pagina
+
+
+def test_metodo_com_um_chamado_so_num_grupo_fala_no_singular(tmp_path):
+    resumo = RESUMO_SO_PROBLEMA_PUBLICO.replace("  a_revisar: 1000000", "  a_revisar: 1")
+    pagina = montar_com_resumo(tmp_path, resumo)
+    assert "A revisar (subtipos que ainda vão ser classificados): 1 chamado (" in pagina
+
+
+def test_metodo_sem_os_grupos_no_resumo_nao_fala_em_problema_publico(tmp_path):
+    # O resumo do agregador (e o da coleta antes da issue #26) não traz os grupos.
+    pagina = montar_com_resumo(tmp_path, RESUMO_DA_COLETA_REAL)
+    assert "LGPD" not in pagina
+    assert "problema público" not in pagina
+
+
+def test_texto_do_problema_publico_nao_compara_nem_classifica_lugares(tmp_path):
+    pagina = montar_com_resumo(tmp_path, RESUMO_SO_PROBLEMA_PUBLICO).replace(FRASE, "").lower()
+    for palavra in PALAVRAS_QUE_COMPARAM:
+        assert palavra not in pagina, palavra
+
+
 # ---- Celular, biblioteca de mapa e crédito ---------------------------------------------
 
 

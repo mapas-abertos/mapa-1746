@@ -4,6 +4,10 @@
 >
 > Cada data é um título `## AAAA-MM-DD`. O CI confere a data e a ordem.
 
+## 2026-11-06
+
+- Issue #26: o mapa passa a mostrar só os chamados de problema público, por privacidade. A lista de classificação (`grupo;tipo;subtipo;motivo`, 5.160 pares em cinco grupos: `publico`, `denuncia`, `pessoal`, `sem_lugar` e `a_revisar`) entrou em `_referencias/20261106_classificacao_subtipos/`, com o fim de linha trocado para LF. A coleta lê a lista (opção `--classificacao` para outra), para com uma mensagem se ela faltar ou estiver malformada, escreve os pares `publico` na consulta e filtra dentro do BigQuery. Tipo e subtipo são comparados sem os espaços das pontas, dos dois lados. Uma quinta consulta conta os chamados por par tipo/subtipo na cidade toda: o resumo diz quantos ficaram fora em cada grupo e lista os pares sem classificação, e a coleta para se essa conta não bater com a do mapa. Sem rua e sem coordenada passam a contar só entre os de problema público. A página de método diz o que o mapa mostra, por que (privacidade, LGPD) e quantos ficaram de fora em cada grupo, com o link da lista.
+
 ## 2026-11-05
 
 - Issue #24: a página de método passou a mostrar os chamados descartados por coordenada fora do município (8.291 na coleta de 05/11). A coleta grava a linha recuada ("dos quais com coordenada fora do município"), e o montador só procurava o nome curto. Um teste novo, com o formato real.

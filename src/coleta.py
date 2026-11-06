@@ -10,9 +10,18 @@ computador. Grava, numa pasta, os mesmos arquivos do agregador (issue #7):
 - ruas.geojson: o desenho de cada rua (do cadastro de logradouros), com os totais;
 - resumo.txt: chamados lidos, sem rua, sem coordenada (inclusive fora do município) e as datas.
 
+Só problema público (issue #26, por privacidade): cada par tipo/subtipo do 1746 está num
+grupo da lista de classificação (`_referencias/20261106_classificacao_subtipos/`). Só os
+chamados do grupo `publico` entram nas ruas e nos quadrados, e o filtro roda dentro do
+BigQuery. Os outros grupos (`denuncia`, `pessoal`, `sem_lugar`, `a_revisar`) e os pares que
+não estão na lista ficam fora do mapa; o resumo diz quantos em cada grupo e lista os pares
+sem classificação, para completar a lista. Tipo e subtipo são comparados sem os espaços do
+começo e do fim, dos dois lados.
+
 Chamado com coordenada fora do município (a mais de 100 m do contorno dos bairros do
 Rio, no mar ou longe) não entra em quadrado nenhum: conta como "sem coordenada", com
-linha própria no resumo. Na rua, ele continua contando.
+linha própria no resumo. Na rua, ele continua contando. Sem rua, sem coordenada e fora do
+município contam só entre os chamados de problema público.
 
 As regras são as do agregador: total, atendidos, fechados e mediana exata de dias até
 fechar; rua ou quadrado com menos chamados que o mínimo sai como "menos de N". A conta
@@ -29,6 +38,7 @@ Uso, a partir da raiz do repositório:
     (opcional) --saida dados/coleta   pasta dos arquivos (padrão: dados/coleta)
     (opcional) --limite-gb 10         para antes de rodar se a consulta for ler mais que isso
                                       (no PowerShell, com ponto: 0.5; 0,001 chega como 0,1)
+    (opcional) --classificacao ARQUIVO  outra lista de classificação (padrão: a do projeto)
     Para ver as opções: --ajuda
 
 O --projeto é o projeto do Google Cloud que roda a consulta (o do sandbox gratuito).
@@ -36,11 +46,13 @@ O valor do mínimo fica a definir até a consulta jurídica; por isso não há p
 """
 
 import argparse
+import csv
+import io
 import json
 import math
 import sys
 from collections.abc import Callable
-from dataclasses import dataclass
+from dataclasses import dataclass, field
 from datetime import date, datetime
 from pathlib import Path
 
@@ -85,7 +97,18 @@ LOGRADOURO_VAZIO = "0"
 LIMITE_GB_PADRAO = 10
 
 # Pasta padrão dos arquivos: dentro de dados/, que não vai para o GitHub.
-PASTA_PADRAO = Path(__file__).resolve().parent.parent / "dados" / "coleta"
+RAIZ = Path(__file__).resolve().parent.parent
+PASTA_PADRAO = RAIZ / "dados" / "coleta"
+
+# Lista de classificação dos pares tipo/subtipo (issue #26). Só o GRUPO_DO_MAPA entra no mapa.
+CLASSIFICACAO_PADRAO = (
+    RAIZ / "_referencias" / "20261106_classificacao_subtipos" / "grupos_subtipos_1746.csv"
+)
+CABECALHO_DA_LISTA = ["grupo", "tipo", "subtipo", "motivo"]
+GRUPO_DO_MAPA = "publico"
+GRUPOS_FORA_DO_MAPA = ["denuncia", "pessoal", "sem_lugar", "a_revisar"]
+GRUPOS = [GRUPO_DO_MAPA, *GRUPOS_FORA_DO_MAPA]
+SEM_CLASSIFICACAO = "sem classificação"  # par que não está na lista
 
 # Permissão pedida no login Google: rodar consultas no BigQuery.
 ESCOPOS = ["https://www.googleapis.com/auth/bigquery"]
@@ -155,6 +178,13 @@ class Dialeto:
     desenho: str  # junta os trechos de {coluna} num desenho só, em GeoJSON
     contorno: str  # junta os bairros de {coluna} num contorno só, o do município
     dentro: str  # se o ponto {lon}, {lat} está no {contorno} do município, com a {tolerancia}
+    texto: Callable[[str], str]  # um texto escrito na consulta, entre apóstrofos
+    pares: str  # tabela de pares (tipo, subtipo) escrita na consulta, com as {linhas}
+
+
+def _texto_no_bigquery(valor):
+    """Texto entre apóstrofos, com barra invertida antes do apóstrofo e da barra invertida."""
+    return "'" + valor.replace("\\", "\\\\").replace("'", "\\'") + "'"
 
 
 BIGQUERY = Dialeto(
@@ -166,17 +196,21 @@ BIGQUERY = Dialeto(
     contorno="ST_UNION_AGG({coluna})",
     # SAFE: coordenada impossível (latitude acima de 90°) vira "fora", sem parar a consulta.
     dentro="ST_DWITHIN(SAFE.ST_GEOGPOINT({lon}, {lat}), {contorno}, {tolerancia})",
+    texto=_texto_no_bigquery,
+    pares="UNNEST(ARRAY<STRUCT<tipo STRING, subtipo STRING>>[{linhas}])",
 )
 
 # Colunas que cada consulta devolve. Qualquer outra faz a coleta parar.
-COLUNAS_DO_RESUMO = ["lidos", "sem_rua", "rua_fora_do_cadastro", "sem_coordenada",
-                     "coordenada_fora_do_municipio", "mais_recente"]
+COLUNAS_DO_RESUMO = ["lidos", "problema_publico", "sem_rua", "rua_fora_do_cadastro",
+                     "sem_coordenada", "coordenada_fora_do_municipio", "mais_recente"]
 COLUNAS_DO_DESENHO = ["bairro", "rua", "desenho"]
+COLUNAS_POR_SUBTIPO = ["tipo", "subtipo", "chamados"]
 COLUNAS = {
     "ruas": CABECALHO_RUAS,
     "quadrados": CABECALHO_QUADRADOS,
     "resumo": COLUNAS_DO_RESUMO,
     "desenho_das_ruas": COLUNAS_DO_DESENHO,
+    "por_subtipo": COLUNAS_POR_SUBTIPO,
 }
 
 
@@ -184,16 +218,97 @@ class LimiteExcedido(ValueError):
     """A simulação mostrou que a consulta vai ler mais que o limite."""
 
 
+class ListaInvalida(ValueError):
+    """A lista de classificação falta ou está malformada. A mensagem diz o que fazer."""
+
+
+# ---- Lista de classificação -----------------------------------------------------------
+
+
+def ler_classificacao(caminho):
+    """Lê a lista de classificação: {(tipo, subtipo): grupo}, sem os espaços das pontas.
+
+    Um par que só se repete por causa dos espaços conta uma vez. Lista que falta ou está
+    malformada faz a coleta parar com ListaInvalida, antes de abrir o BigQuery.
+    """
+    caminho = Path(caminho)
+    corrija = (f"O que fazer: corrija a lista em {caminho} (colunas grupo;tipo;subtipo;motivo, "
+               f"separadas por ponto e vírgula) e rode de novo.")
+    if not caminho.is_file():
+        raise ListaInvalida(
+            f"Não encontrei a lista de classificação em {caminho}. O que fazer: confira o "
+            f"caminho do --classificacao; sem ele, a coleta usa a lista do projeto, em "
+            f"{CLASSIFICACAO_PADRAO.relative_to(RAIZ).as_posix()}."
+        )
+    try:
+        texto = caminho.read_text(encoding="utf-8-sig")
+    except UnicodeDecodeError:
+        raise ListaInvalida(
+            f"A lista de classificação ({caminho}) não está em UTF-8. O que fazer: salve de "
+            f"novo em UTF-8 (no Excel: Salvar como › CSV UTF-8) e rode de novo."
+        ) from None
+    linhas = csv.reader(io.StringIO(texto, newline=""), delimiter=";")
+    cabecalho = [coluna.strip() for coluna in next(linhas, [])]
+    if cabecalho != CABECALHO_DA_LISTA:
+        raise ListaInvalida(
+            f"A lista de classificação não começa com o cabeçalho "
+            f"{';'.join(CABECALHO_DA_LISTA)}. {corrija}"
+        )
+    classificacao, onde = {}, {}
+    for numero, linha in enumerate(linhas, start=2):
+        if not linha:
+            continue
+        if len(linha) != len(CABECALHO_DA_LISTA):
+            raise ListaInvalida(
+                f"A linha {numero} da lista de classificação tem {len(linha)} colunas, e não "
+                f"{len(CABECALHO_DA_LISTA)}. {corrija}"
+            )
+        grupo, tipo, subtipo = (valor.strip() for valor in linha[:3])
+        if grupo not in GRUPOS:
+            raise ListaInvalida(
+                f"A linha {numero} da lista de classificação tem o grupo \"{grupo}\", que não "
+                f"existe. Os grupos são: {', '.join(GRUPOS)}. {corrija}"
+            )
+        if not tipo:
+            raise ListaInvalida(f"A linha {numero} da lista de classificação está sem tipo. {corrija}")
+        par = (tipo, subtipo)
+        if par in classificacao and classificacao[par] != grupo:
+            raise ListaInvalida(
+                f"O par \"{tipo} / {subtipo}\" está em dois grupos na lista de classificação, nas "
+                f"linhas {onde[par]} e {numero} ({classificacao[par]} e {grupo}). {corrija}"
+            )
+        classificacao.setdefault(par, grupo)
+        onde.setdefault(par, numero)
+    if GRUPO_DO_MAPA not in classificacao.values():
+        raise ListaInvalida(
+            f"A lista de classificação não tem nenhum par do grupo {GRUPO_DO_MAPA}: o mapa "
+            f"sairia vazio. {corrija}"
+        )
+    return classificacao
+
+
 # ---- Consultas ------------------------------------------------------------------------
 
 
-def montar_consultas(dialeto=BIGQUERY):
-    """As quatro consultas da coleta, em SQL: {"ruas", "quadrados", "resumo", "desenho_das_ruas"}.
+def _sem_espacos(coluna):
+    """Tipo ou subtipo sem os espaços das pontas; vazio quando não há."""
+    return f"COALESCE(TRIM({coluna}), '')"
 
-    Todas devolvem só linhas somadas. A tabela de chamados é lida nas três primeiras;
-    o desenho das ruas vem só do cadastro de logradouros.
+
+def montar_consultas(dialeto, classificacao):
+    """As cinco consultas da coleta, em SQL: ruas, quadrados, resumo, desenho_das_ruas e
+    por_subtipo.
+
+    Todas devolvem só linhas somadas. A tabela de chamados é lida em todas, menos no
+    desenho das ruas, que vem só do cadastro de logradouros. Os pares do grupo publico da
+    `classificacao` vão escritos na consulta: o filtro roda dentro do BigQuery.
     """
     tabela = dialeto.tabela
+    linhas = ", ".join(
+        f"({dialeto.texto(tipo)}, {dialeto.texto(subtipo)})"
+        for (tipo, subtipo), grupo in sorted(classificacao.items()) if grupo == GRUPO_DO_MAPA
+    )
+    pares_publicos = dialeto.pares.format(linhas=linhas)
     dentro = dialeto.dentro.format(lon="c.longitude", lat="c.latitude",
                                    contorno="municipio.contorno",
                                    tolerancia=TOLERANCIA_DO_MUNICIPIO)
@@ -227,8 +342,12 @@ municipio AS (
   SELECT {dialeto.contorno.format(coluna="geometry")} AS contorno
   FROM {tabela(TABELA_BAIRROS)}
 ),
+pares_publicos AS (
+  SELECT tipo, subtipo FROM {pares_publicos}
+),
 chamados_lidos AS (
   SELECT
+    p.tipo IS NOT NULL AS e_publico,
     c.data_inicio,
     COALESCE(TRIM(c.tipo_situacao) = '{SITUACAO_ATENDIDO}', FALSE) AS atendido,
     {dias} AS dias,
@@ -245,14 +364,17 @@ chamados_lidos AS (
   ) AS c
   LEFT JOIN bairros AS b ON b.id_bairro = c.id_bairro
   LEFT JOIN logradouros AS l ON l.id_logradouro = c.logradouro_valido
+  LEFT JOIN pares_publicos AS p
+    ON p.tipo = {_sem_espacos("c.tipo")} AND p.subtipo = {_sem_espacos("c.subtipo")}
 ),
 no_municipio AS (
-  SELECT c.*, COALESCE({dentro}, FALSE) AS dentro_do_municipio
+  SELECT c.*,
+    CASE WHEN c.e_publico THEN COALESCE({dentro}, FALSE) ELSE FALSE END AS dentro_do_municipio
   FROM chamados_lidos AS c CROSS JOIN municipio
 ),
 chamados AS (
   SELECT
-    data_inicio, atendido, dias, bairro, logradouro_valido, rua,
+    e_publico, data_inicio, atendido, dias, bairro, logradouro_valido, rua,
     latitude IS NOT NULL AND longitude IS NOT NULL AND NOT dentro_do_municipio
       AS fora_do_municipio,
     CASE WHEN dentro_do_municipio THEN latitude END AS latitude,
@@ -261,7 +383,7 @@ chamados AS (
 )"""
 
     ruas = f"""{chamados}
-SELECT bairro, rua,{totais("bairro, rua")} chamados WHERE rua IS NOT NULL) AS por_rua
+SELECT bairro, rua,{totais("bairro, rua")} chamados WHERE e_publico AND rua IS NOT NULL) AS por_rua
 GROUP BY bairro, rua"""
 
     passos = []
@@ -278,7 +400,7 @@ GROUP BY bairro, rua"""
     quadrados = f"""{chamados},
 com_coordenada AS (
   SELECT atendido, dias, latitude, longitude FROM chamados
-  WHERE latitude IS NOT NULL AND longitude IS NOT NULL
+  WHERE e_publico AND latitude IS NOT NULL AND longitude IS NOT NULL
 ),
 {passos},
 no_quadrado AS (
@@ -287,18 +409,30 @@ no_quadrado AS (
 SELECT quadrado,{totais("quadrado")} no_quadrado) AS por_quadrado
 GROUP BY quadrado"""
 
+    # Sem rua, sem coordenada e fora do município: só entre os chamados de problema público.
     resumo = f"""{chamados}
 SELECT
   COUNT(*) AS lidos,
-  COALESCE(SUM(CASE WHEN rua IS NULL THEN 1 ELSE 0 END), 0) AS sem_rua,
-  COALESCE(SUM(CASE WHEN rua IS NULL AND logradouro_valido IS NOT NULL THEN 1 ELSE 0 END), 0)
+  COALESCE(SUM(CASE WHEN e_publico THEN 1 ELSE 0 END), 0) AS problema_publico,
+  COALESCE(SUM(CASE WHEN e_publico AND rua IS NULL THEN 1 ELSE 0 END), 0) AS sem_rua,
+  COALESCE(SUM(CASE WHEN e_publico AND rua IS NULL AND logradouro_valido IS NOT NULL
+                    THEN 1 ELSE 0 END), 0)
     AS rua_fora_do_cadastro,
-  COALESCE(SUM(CASE WHEN latitude IS NULL OR longitude IS NULL THEN 1 ELSE 0 END), 0)
+  COALESCE(SUM(CASE WHEN e_publico AND (latitude IS NULL OR longitude IS NULL)
+                    THEN 1 ELSE 0 END), 0)
     AS sem_coordenada,
-  COALESCE(SUM(CASE WHEN fora_do_municipio THEN 1 ELSE 0 END), 0)
+  COALESCE(SUM(CASE WHEN e_publico AND fora_do_municipio THEN 1 ELSE 0 END), 0)
     AS coordenada_fora_do_municipio,
   MAX(data_inicio) AS mais_recente
 FROM chamados"""
+
+    # Quantos chamados há em cada par tipo/subtipo, na cidade toda: sem lugar nem data.
+    por_subtipo = f"""SELECT
+  {_sem_espacos("tipo")} AS tipo,
+  {_sem_espacos("subtipo")} AS subtipo,
+  COUNT(*) AS chamados
+FROM {tabela(TABELA_CHAMADOS)}
+GROUP BY 1, 2"""
 
     desenho = f"""WITH {bairros}
 SELECT
@@ -310,7 +444,8 @@ LEFT JOIN bairros AS b ON b.id_bairro = CAST(l.id_bairro AS STRING)
 WHERE l.geometry IS NOT NULL AND TRIM(l.nome_completo) != ''
 GROUP BY 1, 2"""
 
-    return {"ruas": ruas, "quadrados": quadrados, "resumo": resumo, "desenho_das_ruas": desenho}
+    return {"ruas": ruas, "quadrados": quadrados, "resumo": resumo, "desenho_das_ruas": desenho,
+            "por_subtipo": por_subtipo}
 
 
 # ---- Coleta ---------------------------------------------------------------------------
@@ -343,6 +478,9 @@ class Resumo:
     minimo: int
     gb_lidos: float = 0.0
     lidos: int = 0
+    problema_publico: int = 0  # os que entram no mapa
+    fora_do_mapa: dict = field(default_factory=dict)  # grupo (ou "sem classificação") -> chamados
+    sem_classificacao: list = field(default_factory=list)  # (tipo, subtipo, chamados)
     sem_rua: int = 0
     rua_fora_do_cadastro: int = 0
     sem_coordenada: int = 0
@@ -359,6 +497,14 @@ class Resumo:
             f"fonte: {TABELA_CHAMADOS} (BigQuery, só leitura)",
             "período: todos",
             f"chamados lidos: {self.lidos}",
+            f"chamados de problema público (entram no mapa): {self.problema_publico}",
+            "fora do mapa, por grupo:",
+            *(f"  {grupo}: {self.fora_do_mapa.get(grupo, 0)}"
+              for grupo in [*GRUPOS_FORA_DO_MAPA, SEM_CLASSIFICACAO]),
+            f"pares tipo/subtipo sem classificação: {len(self.sem_classificacao)}",
+            *(f"  - {tipo} / {subtipo or '(sem subtipo)'}: {chamados}"
+              for tipo, subtipo, chamados in self.sem_classificacao),
+            "entre os chamados de problema público:",
             f"sem rua: {self.sem_rua}",
             f"  dos quais com rua fora do cadastro de logradouros: {self.rua_fora_do_cadastro}",
             f"sem coordenada: {self.sem_coordenada}",
@@ -391,12 +537,44 @@ def _como_data(valor):
     return valor
 
 
-def coletar(cliente, saida, *, minimo, limite_gb=LIMITE_GB_PADRAO, dialeto=BIGQUERY, hoje=None,
-            avisar=print):
+def _contar_por_grupo(resumo, linhas, classificacao):
+    """Soma, no resumo, os chamados de cada grupo a partir da contagem por par tipo/subtipo.
+
+    Confere a conta com a do BigQuery: se não bater (o total lido ou os de problema
+    público), para sem gravar nada.
+    """
+    fora = {grupo: 0 for grupo in [*GRUPOS_FORA_DO_MAPA, SEM_CLASSIFICACAO]}
+    publicos, total, sem_classificacao = 0, 0, []
+    for linha in linhas:
+        tipo, subtipo, chamados = linha["tipo"], linha["subtipo"], int(linha["chamados"])
+        total += chamados
+        grupo = classificacao.get((tipo, subtipo))
+        if grupo is None:
+            fora[SEM_CLASSIFICACAO] += chamados
+            sem_classificacao.append((tipo, subtipo, chamados))
+        elif grupo == GRUPO_DO_MAPA:
+            publicos += chamados
+        else:
+            fora[grupo] += chamados
+    if total != resumo.lidos or publicos != resumo.problema_publico:
+        raise ValueError(
+            f"A conta por grupo não bate com a do mapa: {total} chamados lidos e {publicos} de "
+            f"problema público na contagem por tipo e subtipo, contra {resumo.lidos} e "
+            f"{resumo.problema_publico} no resumo. Nada foi gravado. O que fazer: rode a coleta "
+            f"de novo; se repetir, abra um \"Defeito numa ferramenta\" com esta mensagem."
+        )
+    resumo.fora_do_mapa = fora
+    resumo.sem_classificacao = sorted(sem_classificacao, key=lambda par: (-par[2], par[0], par[1]))
+
+
+def coletar(cliente, saida, *, minimo, classificacao, limite_gb=LIMITE_GB_PADRAO,
+            dialeto=BIGQUERY, hoje=None, avisar=print):
     """Roda as consultas no BigQuery (`cliente`) e grava os totais na pasta `saida`.
 
-    Primeiro simula todas as consultas e para, sem rodar nenhuma, se juntas forem ler
-    mais que `limite_gb`. Devolve o Resumo.
+    Só os chamados do grupo publico da `classificacao` ({(tipo, subtipo): grupo}, como
+    devolve ler_classificacao) entram nas ruas e nos quadrados. Primeiro simula todas as
+    consultas e para, sem rodar nenhuma, se juntas forem ler mais que `limite_gb`.
+    Devolve o Resumo.
     """
     if minimo < 1:
         raise ValueError(
@@ -408,7 +586,7 @@ def coletar(cliente, saida, *, minimo, limite_gb=LIMITE_GB_PADRAO, dialeto=BIGQU
             "O --limite-gb precisa ser maior que zero. "
             f"O que fazer: informe o limite em GB, por exemplo --limite-gb {LIMITE_GB_PADRAO}."
         )
-    consultas = montar_consultas(dialeto)
+    consultas = montar_consultas(dialeto, classificacao)
     limite_bytes = int(limite_gb * GB)
 
     simulacao = bigquery.QueryJobConfig(dry_run=True, use_query_cache=False)
@@ -452,6 +630,8 @@ def coletar(cliente, saida, *, minimo, limite_gb=LIMITE_GB_PADRAO, dialeto=BIGQU
                 for linha in resultados["desenho_das_ruas"]}
     (linha,) = resultados["resumo"]
     resumo.lidos = int(linha["lidos"])
+    resumo.problema_publico = int(linha["problema_publico"])
+    _contar_por_grupo(resumo, resultados["por_subtipo"], classificacao)
     resumo.sem_rua = int(linha["sem_rua"])
     resumo.rua_fora_do_cadastro = int(linha["rua_fora_do_cadastro"])
     resumo.sem_coordenada = int(linha["sem_coordenada"])
@@ -529,6 +709,7 @@ EXEMPLO = {
     "--minimo": "--minimo 5",
     "--saida": "--saida dados/coleta",
     "--limite-gb": f"--limite-gb {LIMITE_GB_PADRAO}",
+    "--classificacao": "--classificacao _referencias/minha_lista.csv",
 }
 
 
@@ -548,7 +729,8 @@ def _ler_limite(texto):
 def _leitor_de_opcoes():
     leitor = LeitorDeOpcoes(
         prog="coleta.py",
-        usage="%(prog)s --projeto ID --minimo N [--saida PASTA] [--limite-gb GB]",
+        usage="%(prog)s --projeto ID --minimo N [--saida PASTA] [--limite-gb GB] "
+              "[--classificacao ARQUIVO]",
         description="Soma no BigQuery os chamados do 1746 por rua e por quadrado de 100 m.",
         formatter_class=Formatador,
         add_help=False,
@@ -568,6 +750,10 @@ def _leitor_de_opcoes():
         "--limite-gb", type=_ler_limite, metavar="GB", default=LIMITE_GB_PADRAO,
         help=f"para antes de rodar se a consulta for ler mais que isso (padrão: {LIMITE_GB_PADRAO}); "
              "no PowerShell, escreva com ponto (0.5): com vírgula, 0,001 chega como 0,1",
+    )
+    opcoes.add_argument(
+        "--classificacao", metavar="ARQUIVO",
+        help="lista de classificação dos tipos e subtipos (padrão: a do projeto, em _referencias/)",
     )
     opcoes.add_argument("-h", "--ajuda", action="help", help="mostra esta ajuda e sai")
     return leitor
@@ -592,6 +778,11 @@ def main(argv=None, *, abrir=None, dialeto=BIGQUERY):
         return 2
     saida = Path(opcoes.saida) if opcoes.saida else PASTA_PADRAO
     try:
+        classificacao = ler_classificacao(opcoes.classificacao or CLASSIFICACAO_PADRAO)
+    except ListaInvalida as erro:
+        print(f"ERRO: {erro}", file=sys.stderr)
+        return 1
+    try:
         cliente = (abrir or abrir_cliente)(opcoes.projeto)
     except (erros_do_login.GoogleAuthError, pydata_google_auth.exceptions.PyDataCredentialsError):
         print(
@@ -601,8 +792,8 @@ def main(argv=None, *, abrir=None, dialeto=BIGQUERY):
         )
         return 1
     try:
-        resumo = coletar(cliente, saida, minimo=opcoes.minimo, limite_gb=opcoes.limite_gb,
-                         dialeto=dialeto)
+        resumo = coletar(cliente, saida, minimo=opcoes.minimo, classificacao=classificacao,
+                         limite_gb=opcoes.limite_gb, dialeto=dialeto)
     except erros_do_google.GoogleAPIError as erro:
         print(
             f"ERRO: o BigQuery recusou a consulta ({type(erro).__name__}): "
