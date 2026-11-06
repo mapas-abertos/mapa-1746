@@ -79,7 +79,8 @@ O gestor abre a sessão nova **com pasta própria** (worktree), para dois sub ch
 1. O gestor pede ao subagente `revisor`, que só lê e não viu o código ser escrito, que compare o pedido de revisão com o chamado. Ele responde "atende / falta", sem comentar estilo.
 2. Você faz o teste manual e marca o checklist do pedido de revisão.
 3. Com a conferência automática verde, peça ao gestor para juntar à versão aprovada (merge). Ainda não vai para uso.
-4. Quando quiser pôr em uso, peça ao gestor "publique a versão" (release). Quem decide publicar é sempre você.
+4. **Depois do merge, o gestor arquiva o sub chat do operador** e comenta no chamado: "sub chat arquivado após o merge". Antes, confere se não há trabalho vivo no sub chat (tarefa em segundo plano, pergunta esperando você). Se o arquivamento falhar por causa do Remote Control, o gestor não o desliga sozinho, porque essa decisão é sua: ele avisa você. Se você preferir, o app pode arquivar sozinho a sessão quando o pedido de revisão fecha; essa configuração é sua.
+5. Quando quiser pôr em uso, peça ao gestor "publique a versão" (release). Quem decide publicar é sempre você.
 
 ## Vários chamados ao mesmo tempo
 
