@@ -29,7 +29,8 @@ RAIZ = Path(__file__).resolve().parent.parent
 
 CABECALHO_RUAS = ["bairro", "rua", "chamados", "atendidos", "fechados", "mediana_dias_ate_fechar"]
 CABECALHO_QUADRADOS = ["quadrado", "chamados", "atendidos", "fechados", "mediana_dias_ate_fechar"]
-COLUNAS_DO_RESUMO = ["lidos", "sem_rua", "rua_fora_do_cadastro", "sem_coordenada", "mais_recente"]
+COLUNAS_DO_RESUMO = ["lidos", "sem_rua", "rua_fora_do_cadastro", "sem_coordenada",
+                     "coordenada_fora_do_municipio", "mais_recente"]
 COLUNAS_DO_DESENHO = ["bairro", "rua", "desenho"]
 
 # Colunas do chamado que nunca podem sair do BigQuery.
@@ -41,7 +42,7 @@ PARA_GRAUS = Transformer.from_crs("EPSG:31983", "EPSG:4326", always_xy=True)
 HOJE = date(2026, 11, 5)
 GIB = 1024**3
 
-# O DuckDB faz de conta que é o BigQuery: mesmas consultas, com estes três pedaços trocados.
+# O DuckDB faz de conta que é o BigQuery: mesmas consultas, com estes pedaços trocados.
 TABELAS_LOCAIS = {
     "datario.adm_central_atendimento_1746.chamado": "chamado",
     "datario.dados_mestres.logradouro": "logradouro",
@@ -54,6 +55,9 @@ DUCKDB = Dialeto(
     inteiro="BIGINT",
     # Sem a extensão de mapas do DuckDB: o desenho de teste já vem pronto, em GeoJSON.
     desenho="MIN({coluna})",
+    # Sem a extensão de mapas, o município de teste é uma caixa em volta do Rio.
+    contorno="MIN({coluna})",
+    dentro="({lon} BETWEEN -43.80 AND -43.09 AND {lat} BETWEEN -23.09 AND -22.74)",
 )
 
 
@@ -245,6 +249,72 @@ def test_rua_fora_do_cadastro_conta_como_sem_rua(tmp_path):
     assert "rua fora do cadastro de logradouros: 1" in (saida / "resumo.txt").read_text(
         encoding="utf-8"
     )
+
+
+# ---- Coordenada fora do município ----------------------------------------------------
+
+# Chamados inventados com coordenada fora do Rio: no mar, perto do Equador, no interior
+# e uma coordenada impossível (latitude acima de 90°).
+FORA_DO_RIO = [
+    (-23.30, -43.20),  # no mar, ao sul de Copacabana
+    (-0.49, -48.00),  # perto do Equador
+    (-21.80, -44.70),  # interior de Minas Gerais
+    (2290668.0, -43.17),  # coordenada impossível
+]
+
+
+def lista_com_chamados_fora_do_rio():
+    return LISTA_EXEMPLO + "".join(
+        f"2025-08-0{i} 10:00;2025-08-0{i} 22:00;Limpeza;Remoção de entulho;Atendido;"
+        f"Centro;Rua A;{lat};{lon}\n"
+        for i, (lat, lon) in enumerate(FORA_DO_RIO, start=1)
+    )
+
+
+def test_chamado_fora_do_municipio_nao_entra_em_nenhum_quadrado(tmp_path):
+    _, saida, _, _ = rodar(tmp_path, lista_com_chamados_fora_do_rio(), minimo=1)
+    do_agregador = rodar_agregador(tmp_path, LISTA_EXEMPLO, 1)
+    for nome in ("quadrados.csv", "quadrados.geojson"):
+        assert (saida / nome).read_text(encoding="utf-8") == (
+            do_agregador / nome
+        ).read_text(encoding="utf-8"), f"{nome} traz chamado de fora do Rio"
+
+
+def test_chamado_fora_do_municipio_conta_como_sem_coordenada_com_linha_propria(tmp_path):
+    resumo, saida, _, _ = rodar(tmp_path, lista_com_chamados_fora_do_rio(), minimo=1)
+    assert resumo.lidos == 19 + 4
+    assert resumo.sem_coordenada == 4 + 4
+    assert resumo.coordenada_fora_do_municipio == 4
+    texto = (saida / "resumo.txt").read_text(encoding="utf-8")
+    assert "sem coordenada: 8" in texto
+    assert "coordenada fora do município: 4" in texto
+
+
+def test_chamado_fora_do_municipio_continua_contando_na_rua(tmp_path):
+    _, saida, _, _ = rodar(tmp_path, lista_com_chamados_fora_do_rio(), minimo=1)
+    ruas = {(r["bairro"], r["rua"]): r for r in ler_csv(saida / "ruas.csv")}
+    assert ruas[("Centro", "Rua A")]["chamados"] == "10"  # 6 do exemplo e os 4 de fora
+
+
+def test_resumo_sem_chamado_fora_do_municipio_mostra_zero(tmp_path):
+    resumo, saida, _, _ = rodar(tmp_path)
+    assert resumo.coordenada_fora_do_municipio == 0
+    assert "coordenada fora do município: 0" in (saida / "resumo.txt").read_text(encoding="utf-8")
+
+
+def test_bigquery_confere_o_ponto_contra_o_contorno_dos_bairros():
+    consulta = montar_consultas(BIGQUERY)["quadrados"]
+    assert "ST_UNION_AGG(geometry) AS contorno" in consulta
+    assert "FROM `datario.dados_mestres.bairro`" in consulta.split("AS contorno")[1].split(")")[0]
+    # Longitude antes da latitude, e uma coordenada impossível vira "fora", sem erro.
+    assert (
+        "ST_DWITHIN(SAFE.ST_GEOGPOINT(c.longitude, c.latitude), municipio.contorno, "
+        f"{coleta.TOLERANCIA_DO_MUNICIPIO})"
+    ) in consulta
+
+
+def test_tolerancia_do_contorno_e_de_no_maximo_um_quadrado():
+    assert 0 <= coleta.TOLERANCIA_DO_MUNICIPIO <= 100
 
 
 # ---- A conta de metros dentro da consulta dá o mesmo quadrado que o pyproj ------------
@@ -469,6 +539,31 @@ def test_limite_vem_da_linha_de_comando(tmp_path, capsys):
     assert not (tmp_path / "s").exists()
 
 
+@pytest.mark.parametrize("valor, texto", [
+    (0, "0"), (0.001, "0,001"), (0.0123, "0,012"), (0.5, "0,5"), (0.25, "0,25"),
+    (0.999, "1"), (1, "1,0"), (12.04, "12,0"),
+])
+def test_gb_menor_que_1_aparece_com_casas_suficientes(valor, texto):
+    assert coleta._gb(valor) == texto
+
+
+def test_limite_menor_que_1_gb_aparece_como_foi_pedido(tmp_path):
+    cliente = ClienteFalso(montar_base(LISTA_EXEMPLO), bytes_por_consulta=1024**2)
+    with pytest.raises(LimiteExcedido) as erro:
+        rodar(tmp_path, cliente=cliente, limite_gb=0.001)
+    # 4 consultas de 1 MB cada: 0,0039 GB, acima de 0,001 GB.
+    assert "0,0039 GB" in str(erro.value) and "limite de 0,001 GB" in str(erro.value)
+
+
+def test_limite_com_virgula_ou_ponto_pela_linha_de_comando(tmp_path, capsys):
+    for limite in ("0,001", "0.001"):
+        cliente = ClienteFalso(montar_base(LISTA_EXEMPLO), bytes_por_consulta=1024**2)
+        codigo = main(["--projeto", "p", "--minimo", "5", "--saida", str(tmp_path / "s"),
+                       "--limite-gb", limite], abrir=lambda projeto: cliente, dialeto=DUCKDB)
+        assert codigo != 0
+        assert "limite: 0,001 GB" in capsys.readouterr().out
+
+
 def test_limite_padrao_cabe_no_sandbox_gratuito():
     assert 0 < coleta.LIMITE_GB_PADRAO <= 1024 / 10  # pelo menos 10 coletas no 1 TB do mês
 
@@ -499,6 +594,7 @@ def test_resumo_traz_lidos_sem_rua_sem_coordenada_e_as_datas(tmp_path):
         "chamados lidos: 19",
         "sem rua: 2",
         "sem coordenada: 4",
+        "coordenada fora do município: 0",
         "chamado mais recente na base: 2025-07-01",
         "data da coleta: 2026-11-05",
         "mínimo para mostrar o número: 5",

@@ -8,7 +8,11 @@ computador. Grava, numa pasta, os mesmos arquivos do agregador (issue #7):
 - ruas.csv: totais por bairro e rua;
 - quadrados.csv e quadrados.geojson: totais por quadrado de 100 m x 100 m;
 - ruas.geojson: o desenho de cada rua (do cadastro de logradouros), com os totais;
-- resumo.txt: chamados lidos, sem rua, sem coordenada e as datas.
+- resumo.txt: chamados lidos, sem rua, sem coordenada (inclusive fora do município) e as datas.
+
+Chamado com coordenada fora do município (a mais de 100 m do contorno dos bairros do
+Rio, no mar ou longe) não entra em quadrado nenhum: conta como "sem coordenada", com
+linha própria no resumo. Na rua, ele continua contando.
 
 As regras são as do agregador: total, atendidos, fechados e mediana exata de dias até
 fechar; rua ou quadrado com menos chamados que o mínimo sai como "menos de N". A conta
@@ -24,6 +28,7 @@ Uso, a partir da raiz do repositório:
     .venv/Scripts/python src/coleta.py --projeto ID_DO_PROJETO --minimo N
     (opcional) --saida dados/coleta   pasta dos arquivos (padrão: dados/coleta)
     (opcional) --limite-gb 10         para antes de rodar se a consulta for ler mais que isso
+                                      (no PowerShell, com ponto: 0.5; 0,001 chega como 0,1)
     Para ver as opções: --ajuda
 
 O --projeto é o projeto do Google Cloud que roda a consulta (o do sandbox gratuito).
@@ -67,6 +72,11 @@ from agregador import (
 TABELA_CHAMADOS = "datario.adm_central_atendimento_1746.chamado"
 TABELA_LOGRADOUROS = "datario.dados_mestres.logradouro"  # um trecho de rua por linha
 TABELA_BAIRROS = "datario.dados_mestres.bairro"
+
+# Chamado com coordenada a mais que isso (em metros) do contorno dos bairros do Rio conta
+# como "sem coordenada" (fora do município). A folga cobre a beira-mar e as frestas
+# entre bairros, e não passa do lado de um quadrado.
+TOLERANCIA_DO_MUNICIPIO = 100
 
 # Código de logradouro que conta como "sem rua", além de vazio.
 LOGRADOURO_VAZIO = "0"
@@ -143,6 +153,8 @@ class Dialeto:
     segundos: str  # segundos de {inicio} a {fim}
     inteiro: str  # tipo de número inteiro
     desenho: str  # junta os trechos de {coluna} num desenho só, em GeoJSON
+    contorno: str  # junta os bairros de {coluna} num contorno só, o do município
+    dentro: str  # se o ponto {lon}, {lat} está no {contorno} do município, com a {tolerancia}
 
 
 BIGQUERY = Dialeto(
@@ -151,10 +163,14 @@ BIGQUERY = Dialeto(
     segundos="DATETIME_DIFF({fim}, {inicio}, SECOND)",
     inteiro="INT64",
     desenho="ST_ASGEOJSON(ST_UNION_AGG({coluna}))",
+    contorno="ST_UNION_AGG({coluna})",
+    # SAFE: coordenada impossível (latitude acima de 90°) vira "fora", sem parar a consulta.
+    dentro="ST_DWITHIN(SAFE.ST_GEOGPOINT({lon}, {lat}), {contorno}, {tolerancia})",
 )
 
 # Colunas que cada consulta devolve. Qualquer outra faz a coleta parar.
-COLUNAS_DO_RESUMO = ["lidos", "sem_rua", "rua_fora_do_cadastro", "sem_coordenada", "mais_recente"]
+COLUNAS_DO_RESUMO = ["lidos", "sem_rua", "rua_fora_do_cadastro", "sem_coordenada",
+                     "coordenada_fora_do_municipio", "mais_recente"]
 COLUNAS_DO_DESENHO = ["bairro", "rua", "desenho"]
 COLUNAS = {
     "ruas": CABECALHO_RUAS,
@@ -178,6 +194,9 @@ def montar_consultas(dialeto=BIGQUERY):
     o desenho das ruas vem só do cadastro de logradouros.
     """
     tabela = dialeto.tabela
+    dentro = dialeto.dentro.format(lon="c.longitude", lat="c.latitude",
+                                   contorno="municipio.contorno",
+                                   tolerancia=TOLERANCIA_DO_MUNICIPIO)
     dias = dialeto.segundos.format(inicio="c.data_inicio", fim="c.data_fim") + " / 86400"
 
     def mediana(grupo):
@@ -204,7 +223,11 @@ logradouros AS (
   FROM {tabela(TABELA_LOGRADOUROS)}
   GROUP BY 1
 ),
-chamados AS (
+municipio AS (
+  SELECT {dialeto.contorno.format(coluna="geometry")} AS contorno
+  FROM {tabela(TABELA_BAIRROS)}
+),
+chamados_lidos AS (
   SELECT
     c.data_inicio,
     COALESCE(TRIM(c.tipo_situacao) = '{SITUACAO_ATENDIDO}', FALSE) AS atendido,
@@ -222,6 +245,19 @@ chamados AS (
   ) AS c
   LEFT JOIN bairros AS b ON b.id_bairro = c.id_bairro
   LEFT JOIN logradouros AS l ON l.id_logradouro = c.logradouro_valido
+),
+no_municipio AS (
+  SELECT c.*, COALESCE({dentro}, FALSE) AS dentro_do_municipio
+  FROM chamados_lidos AS c CROSS JOIN municipio
+),
+chamados AS (
+  SELECT
+    data_inicio, atendido, dias, bairro, logradouro_valido, rua,
+    latitude IS NOT NULL AND longitude IS NOT NULL AND NOT dentro_do_municipio
+      AS fora_do_municipio,
+    CASE WHEN dentro_do_municipio THEN latitude END AS latitude,
+    CASE WHEN dentro_do_municipio THEN longitude END AS longitude
+  FROM no_municipio
 )"""
 
     ruas = f"""{chamados}
@@ -259,6 +295,8 @@ SELECT
     AS rua_fora_do_cadastro,
   COALESCE(SUM(CASE WHEN latitude IS NULL OR longitude IS NULL THEN 1 ELSE 0 END), 0)
     AS sem_coordenada,
+  COALESCE(SUM(CASE WHEN fora_do_municipio THEN 1 ELSE 0 END), 0)
+    AS coordenada_fora_do_municipio,
   MAX(data_inicio) AS mais_recente
 FROM chamados"""
 
@@ -308,6 +346,7 @@ class Resumo:
     sem_rua: int = 0
     rua_fora_do_cadastro: int = 0
     sem_coordenada: int = 0
+    coordenada_fora_do_municipio: int = 0
     mais_recente: date | None = None
     data_da_coleta: date | None = None
     ruas: int = 0
@@ -323,6 +362,7 @@ class Resumo:
             f"sem rua: {self.sem_rua}",
             f"  dos quais com rua fora do cadastro de logradouros: {self.rua_fora_do_cadastro}",
             f"sem coordenada: {self.sem_coordenada}",
+            f"  dos quais com coordenada fora do município: {self.coordenada_fora_do_municipio}",
             f"chamado mais recente na base: {self.mais_recente or 'nenhum'}",
             f"data da coleta: {self.data_da_coleta}",
             f"ruas: {self.ruas}",
@@ -334,7 +374,15 @@ class Resumo:
 
 
 def _gb(valor):
-    return f"{valor:.1f}".replace(".", ",")
+    """GB com vírgula: uma casa a partir de 1 GB; abaixo, casas até mostrar 2 algarismos."""
+    if valor == 0:
+        return "0"
+    if valor >= 1:
+        texto = f"{valor:.1f}"
+    else:
+        casas = 1 - math.floor(math.log10(valor))
+        texto = f"{valor:.{casas}f}".rstrip("0").rstrip(".")
+    return texto.replace(".", ",")
 
 
 def _como_data(valor):
@@ -407,6 +455,7 @@ def coletar(cliente, saida, *, minimo, limite_gb=LIMITE_GB_PADRAO, dialeto=BIGQU
     resumo.sem_rua = int(linha["sem_rua"])
     resumo.rua_fora_do_cadastro = int(linha["rua_fora_do_cadastro"])
     resumo.sem_coordenada = int(linha["sem_coordenada"])
+    resumo.coordenada_fora_do_municipio = int(linha["coordenada_fora_do_municipio"])
     resumo.mais_recente = _como_data(linha["mais_recente"])
     resumo.ruas = len(ruas)
     resumo.quadrados = len(quadrados)
@@ -517,7 +566,8 @@ def _leitor_de_opcoes():
                         help="pasta onde gravar os arquivos (padrão: dados/coleta)")
     opcoes.add_argument(
         "--limite-gb", type=_ler_limite, metavar="GB", default=LIMITE_GB_PADRAO,
-        help=f"para antes de rodar se a consulta for ler mais que isso (padrão: {LIMITE_GB_PADRAO})",
+        help=f"para antes de rodar se a consulta for ler mais que isso (padrão: {LIMITE_GB_PADRAO}); "
+             "no PowerShell, escreva com ponto (0.5): com vírgula, 0,001 chega como 0,1",
     )
     opcoes.add_argument("-h", "--ajuda", action="help", help="mostra esta ajuda e sai")
     return leitor
