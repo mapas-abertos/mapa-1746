@@ -2,3 +2,5 @@
 # Instalar: pip install -r requirements-dev.txt
 ruff==0.17.3
 pytest==9.2.0
+# Testes da coleta (issue #15): roda as consultas num banco na memória, sem o BigQuery.
+duckdb==2.0.0
