@@ -369,6 +369,16 @@ def test_metodo_diz_quantos_chamados_com_coordenada_fora_do_municipio_foram_desc
     assert "1.234 chamados com coordenada fora do município do Rio foram descartados do mapa" in pagina
 
 
+def test_metodo_le_a_linha_de_fora_do_municipio_no_formato_real_da_coleta(tmp_path):
+    # Issue #24: a coleta grava a linha recuada, debaixo de "sem coordenada".
+    resumo = RESUMO_DA_COLETA_REAL.replace(
+        "coordenada fora do município: 1234\n",
+        "  dos quais com coordenada fora do município: 8291\n",
+    )
+    pagina = montar_com_resumo(tmp_path, resumo)
+    assert "8.291 chamados com coordenada fora do município do Rio foram descartados do mapa" in pagina
+
+
 def test_metodo_funciona_sem_a_linha_de_coordenada_fora_do_municipio(tmp_path):
     resumo = RESUMO_DA_COLETA_REAL.replace("coordenada fora do município: 1234\n", "")
     pagina = montar_com_resumo(tmp_path, resumo)
