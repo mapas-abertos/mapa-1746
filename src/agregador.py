@@ -278,8 +278,8 @@ def agregar(entrada, saida, *, minimo, inicio=None, fim=None):
     resumo.quadrados = len(quadrados)
     saida = Path(saida)
     saida.mkdir(parents=True, exist_ok=True)
-    _gravar_ruas(saida / "ruas.csv", ruas, minimo)
-    _gravar_quadrados(saida, quadrados, minimo)
+    gravar_ruas(saida / "ruas.csv", ruas, minimo)
+    gravar_quadrados(saida, quadrados, minimo)
     (saida / "resumo.txt").write_text(resumo.texto(), encoding="utf-8")
     return resumo
 
@@ -287,7 +287,7 @@ def agregar(entrada, saida, *, minimo, inicio=None, fim=None):
 # ---- Gravação -------------------------------------------------------------------------
 
 
-def _numeros(totais, minimo):
+def numeros(totais, minimo):
     """[chamados, atendidos, fechados, mediana]; abaixo do mínimo, só "menos de N"."""
     if totais.chamados < minimo:
         return [f"menos de {minimo}", None, None, None]
@@ -306,20 +306,20 @@ def _gravar_csv(caminho, cabecalho, linhas):
             escritor.writerow([_celula(valor) for valor in linha])
 
 
-def _gravar_ruas(caminho, ruas, minimo):
+def gravar_ruas(caminho, ruas, minimo):
     linhas = (
-        [bairro, rua, *_numeros(ruas[(bairro, rua)], minimo)] for bairro, rua in sorted(ruas)
+        [bairro, rua, *numeros(ruas[(bairro, rua)], minimo)] for bairro, rua in sorted(ruas)
     )
     _gravar_csv(caminho, CABECALHO_RUAS, linhas)
 
 
-def _gravar_quadrados(saida, quadrados, minimo):
+def gravar_quadrados(saida, quadrados, minimo):
     para_graus = Transformer.from_crs(GRADE_EM_METROS, GRAUS, always_xy=True)
     linhas = []
     features = []
     for x, y in sorted(quadrados):
-        numeros = [f"{x}_{y}", *_numeros(quadrados[(x, y)], minimo)]
-        linhas.append(numeros)
+        linha = [f"{x}_{y}", *numeros(quadrados[(x, y)], minimo)]
+        linhas.append(linha)
         lado = LADO_DO_QUADRADO
         # Sudoeste, sudeste, nordeste, noroeste e de volta ao sudoeste (sentido anti-horário).
         cantos_x = [x, x + lado, x + lado, x, x]
@@ -331,7 +331,7 @@ def _gravar_quadrados(saida, quadrados, minimo):
         ]
         features.append({
             "type": "Feature",
-            "properties": dict(zip(CABECALHO_QUADRADOS, numeros)),
+            "properties": dict(zip(CABECALHO_QUADRADOS, linha)),
             "geometry": {"type": "Polygon", "coordinates": [contorno]},
         })
     _gravar_csv(saida / "quadrados.csv", CABECALHO_QUADRADOS, linhas)
@@ -377,17 +377,27 @@ class ErroNaLinhaDeComando(Exception):
     """Algo errado nas opções da linha de comando. A mensagem diz o que fazer."""
 
 
-class _Formatador(argparse.HelpFormatter):
+class Formatador(argparse.HelpFormatter):
     def add_usage(self, usage, actions, groups, prefix=None):
         super().add_usage(usage, actions, groups, "uso: " if prefix is None else prefix)
 
 
-class _LeitorDeOpcoes(argparse.ArgumentParser):
+class LeitorDeOpcoes(argparse.ArgumentParser):
+    """O leitor da linha de comando, com os erros em português.
+
+    `exemplos` e `veja_a_ajuda` mudam de uma ferramenta para outra (a coleta também usa).
+    """
+
+    def __init__(self, *args, exemplos=None, veja_a_ajuda=VEJA_A_AJUDA, **kwargs):
+        super().__init__(*args, **kwargs)
+        self.exemplos = EXEMPLO if exemplos is None else exemplos
+        self.veja_a_ajuda = veja_a_ajuda
+
     def error(self, message):
-        raise ErroNaLinhaDeComando(_traduzir(message))
+        raise ErroNaLinhaDeComando(traduzir(message, self.exemplos, self.veja_a_ajuda))
 
 
-def _traduzir(mensagem):
+def traduzir(mensagem, exemplos=EXEMPLO, veja_a_ajuda=VEJA_A_AJUDA):
     """Põe em português os erros que o próprio argparse ainda pode dar."""
     opcao, _, detalhe = mensagem.partition(": ")
     if opcao.startswith("argument "):
@@ -395,14 +405,14 @@ def _traduzir(mensagem):
         if "O que fazer:" in detalhe:  # veio de uma das funções de leitura abaixo
             return detalhe
         if "expected one argument" in detalhe:
-            exemplo = EXEMPLO.get(opcao, opcao)
+            exemplo = exemplos.get(opcao, opcao)
             return f"Falta o valor do {opcao}. O que fazer: escreva o valor logo depois, por exemplo {exemplo}."
     if opcao == "unrecognized arguments":
-        return f"Não conheço {detalhe}. O que fazer: {VEJA_A_AJUDA}"
-    return f"Não entendi a linha de comando. O que fazer: {VEJA_A_AJUDA}"
+        return f"Não conheço {detalhe}. O que fazer: {veja_a_ajuda}"
+    return f"Não entendi a linha de comando. O que fazer: {veja_a_ajuda}"
 
 
-def _ler_minimo(texto):
+def ler_minimo(texto):
     try:
         minimo = int(texto)
     except ValueError:
@@ -430,11 +440,11 @@ def _leitor_de_data(opcao):
 
 
 def _leitor_de_opcoes():
-    leitor = _LeitorDeOpcoes(
+    leitor = LeitorDeOpcoes(
         prog="agregador.py",
         usage="%(prog)s ENTRADA --saida PASTA --minimo N [--inicio AAAA-MM-DD] [--fim AAAA-MM-DD]",
         description="Totais dos chamados do 1746 por rua e por quadrado de 100 m.",
-        formatter_class=_Formatador,
+        formatter_class=Formatador,
         add_help=False,
     )
     arquivos = leitor.add_argument_group("arquivos")
@@ -442,7 +452,7 @@ def _leitor_de_opcoes():
     arquivos.add_argument("--saida", metavar="PASTA", help="pasta onde gravar os arquivos")
     opcoes = leitor.add_argument_group("opções")
     opcoes.add_argument(
-        "--minimo", type=_ler_minimo, metavar="N",
+        "--minimo", type=ler_minimo, metavar="N",
         help="rua ou quadrado com menos chamados que N sai como \"menos de N\"",
     )
     opcoes.add_argument("--inicio", type=_leitor_de_data("--inicio"), metavar="AAAA-MM-DD",
