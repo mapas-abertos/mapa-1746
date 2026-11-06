@@ -6,16 +6,20 @@ pasta, o site pronto: um mapa (index.html), a página de método e fonte (metodo
 tabelas para baixar. Só as quatro saídas entram: nenhum outro arquivo da pasta de entrada vai
 para o site, e nada traz chamado individual, coordenada de chamado ou identificador.
 
-O site abre com duplo clique no index.html, sem servidor: os dados vão num arquivo .js
-(dados.js) e não são buscados pela rede. Só o mapa de fundo e a biblioteca Leaflet vêm da
-internet. Publicar no GitHub Pages fica para depois do OK do advogado (ver decisoes.md).
+Os dados vão num arquivo .js (dados.js), e não são buscados pela rede: o site não precisa
+de servidor de dados. Para ver o mapa de fundo, sirva a pasta por http (o OpenStreetMap
+bloqueia o pedido de uma página aberta do disco, com duplo clique, porque ela não diz de
+que site vem). Só o mapa de fundo e a biblioteca Leaflet vêm da internet. Publicar no GitHub Pages fica para depois do OK do advogado (ver decisoes.md).
 
 Uso, a partir da raiz do repositório:
 
     .venv/Scripts/python src/montar_site.py dados/saida --saida dados/site
     Para ver as opções: --ajuda
 
-Depois, abra dados/site/index.html no navegador.
+Depois, sirva a pasta e abra o endereço no navegador:
+
+    .venv/Scripts/python -m http.server 8765 --bind 127.0.0.1 -d dados/site
+    http://127.0.0.1:8765
 """
 
 import argparse
@@ -260,16 +264,68 @@ def _pagina_do_mapa(minimo):
 """
 
 
+def _porcentagem(parte, total):
+    """'53,4%' (uma casa, vírgula decimal); None se não há total para a conta."""
+    if total <= 0:
+        return None
+    return f"{parte / total * 100:.1f}".replace(".", ",") + "%"
+
+
+def _numero_do_resumo(resumo, *nomes):
+    """Inteiro de um dos campos do resumo, ou None se não houver."""
+    for nome in nomes:
+        valor = resumo.get(nome, "")
+        if valor.isdigit():
+            return int(valor)
+    return None
+
+
+def _quantos(numero, porcentagem):
+    """'10.902.581 chamados (53,4%) não têm', ou '1 chamado não tem' (a conta inclui o verbo)."""
+    contagem = f"{_milhar(numero)} chamado" if numero == 1 else f"{_milhar(numero)} chamados"
+    if porcentagem:
+        contagem += f" ({porcentagem})"
+    return contagem, ("não tem" if numero == 1 else "não têm")
+
+
+def _o_que_fica_de_fora(resumo):
+    """Itens da página de método sobre os chamados que não entram no mapa nem na tabela por rua.
+
+    Lê do resumo.txt: chamados lidos (ou contados), sem coordenada, sem rua e, se a coleta
+    gravar, coordenada fora do município. O que o resumo não traz não aparece.
+    """
+    total = _numero_do_resumo(resumo, "contados", "chamados lidos")
+    itens = []
+    base = f"Dos {_milhar(total)} chamados lidos, " if total is not None else ""
+    sem_coordenada = _numero_do_resumo(resumo, "sem coordenada")
+    if sem_coordenada is not None:
+        contagem, verbo = _quantos(sem_coordenada, _porcentagem(sem_coordenada, total or 0))
+        itens.append(
+            f"{base}{contagem} {verbo} coordenada e não aparecem no mapa. "
+            f"O mapa mostra só os chamados que têm coordenada."
+        )
+    sem_rua = _numero_do_resumo(resumo, "sem rua")
+    if sem_rua is not None:
+        contagem, verbo = _quantos(sem_rua, _porcentagem(sem_rua, total or 0))
+        itens.append(
+            f"{contagem} {verbo} rua e não entram na tabela por rua; "
+            f"se têm coordenada, aparecem no mapa."
+        )
+    fora = _numero_do_resumo(resumo, "coordenada fora do município")
+    if fora is not None:
+        itens.append(
+            f"{_milhar(fora)} chamados com coordenada fora do município do Rio foram descartados "
+            f"do mapa, porque a coordenada está provavelmente errada."
+        )
+    return "\n".join(f"      <li>{html.escape(item)}</li>" for item in itens)
+
+
 def _pagina_de_metodo(minimo, resumo):
     mais_recente = _data_do_resumo(
         resumo, "chamado mais recente na base", "chamado mais recente", "data do chamado mais recente"
     )
     coleta = _data_do_resumo(resumo, "data da coleta", "coleta")
-    sem_coordenada = resumo.get("sem coordenada", "")
-    aviso_sem_coordenada = (
-        f"<li>Chamados sem coordenada não aparecem no mapa: {html.escape(sem_coordenada)}.</li>"
-        if sem_coordenada.isdigit() else ""
-    )
+    fora_do_mapa = _o_que_fica_de_fora(resumo)
     return f"""<!doctype html>
 <html lang="pt-BR">
 <head>
@@ -316,11 +372,11 @@ def _pagina_de_metodo(minimo, resumo):
       <li><strong>Atendidos</strong> são os chamados com a situação "Atendido";
       <strong>fechados</strong>, os que têm data de fechamento;
       <strong>ainda abertos</strong>, os chamados menos os fechados.</li>
-      {aviso_sem_coordenada}
     </ul>
 
     <h2>Limites</h2>
     <ul>
+{fora_do_mapa}
       <li>A falta de água e de luz em casa não passa pelo 1746, e por isso não aparece aqui.</li>
       <li>Ausência de chamado não é ausência de problema: nem todo problema vira chamado.</li>
       <li>O mapa mostra só os números, sem juntar nem comparar lugares.</li>
@@ -522,7 +578,11 @@ def main(argv=None):
             erro = "um dos arquivos de entrada não está em UTF-8. O que fazer: rode de novo o agregador."
         print(f"ERRO: {erro}", file=sys.stderr)
         return 1
-    print(f"Site gravado em {opcoes.saida}. Abra {Path(opcoes.saida) / 'index.html'} no navegador.")
+    print(f"Site gravado em {opcoes.saida}.")
+    print(
+        f"Para ver: python -m http.server 8765 --bind 127.0.0.1 -d {opcoes.saida} "
+        f"e abra http://127.0.0.1:8765 no navegador."
+    )
     return 0
 
 

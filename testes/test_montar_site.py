@@ -332,6 +332,64 @@ def test_metodo_le_as_datas_do_resumo_no_formato_da_coleta(tmp_path):
     assert "Data da coleta: 05/11/2026" in pagina
 
 
+RESUMO_DA_COLETA_REAL = """Resumo da coleta (chamados do 1746)
+fonte: datario.adm_central_atendimento_1746.chamado (BigQuery, só leitura)
+período: todos
+chamados lidos: 20425527
+sem rua: 6513009
+  dos quais com rua fora do cadastro de logradouros: 1000
+sem coordenada: 10902581
+coordenada fora do município: 1234
+chamado mais recente na base: 2026-10-30
+data da coleta: 2026-11-05
+ruas: 30000
+quadrados: 100000
+mínimo para mostrar o número: 5
+"""
+
+
+def montar_com_resumo(tmp_path, resumo):
+    pasta = agregado(tmp_path)
+    (pasta / "resumo.txt").write_text(resumo, encoding="utf-8")
+    site = tmp_path / "site"
+    montar_site(pasta, site)
+    return sem_marcas(texto(site, "metodo.html"))
+
+
+def test_metodo_diz_quantos_chamados_nao_aparecem_no_mapa_e_a_porcentagem(tmp_path):
+    pagina = montar_com_resumo(tmp_path, RESUMO_DA_COLETA_REAL)
+    # 10.902.581 de 20.425.527 = 53,4%; 6.513.009 de 20.425.527 = 31,9%.
+    assert "10.902.581 chamados (53,4%) não têm coordenada e não aparecem no mapa" in pagina
+    assert "6.513.009 chamados (31,9%) não têm rua e não entram na tabela por rua" in pagina
+    assert "20.425.527 chamados" in pagina  # o total lido, para a pessoa ter a base da conta
+
+
+def test_metodo_diz_quantos_chamados_com_coordenada_fora_do_municipio_foram_descartados(tmp_path):
+    pagina = montar_com_resumo(tmp_path, RESUMO_DA_COLETA_REAL)
+    assert "1.234 chamados com coordenada fora do município do Rio foram descartados do mapa" in pagina
+
+
+def test_metodo_funciona_sem_a_linha_de_coordenada_fora_do_municipio(tmp_path):
+    resumo = RESUMO_DA_COLETA_REAL.replace("coordenada fora do município: 1234\n", "")
+    pagina = montar_com_resumo(tmp_path, resumo)
+    assert "fora do município" not in pagina
+    assert "não têm coordenada e não aparecem no mapa" in pagina
+
+
+def test_metodo_sem_total_lido_mostra_so_a_contagem_sem_porcentagem(tmp_path):
+    resumo = "sem coordenada: 4\nsem rua: 2\nmínimo para mostrar o número: 5\n"
+    pagina = montar_com_resumo(tmp_path, resumo)
+    assert "4 chamados não têm coordenada e não aparecem no mapa" in pagina
+    assert "%" not in pagina
+
+
+def test_metodo_sem_chamados_sem_coordenada_nao_fala_em_porcentagem_quebrada(tmp_path):
+    resumo = "chamados lidos: 0\nsem coordenada: 0\nsem rua: 0\nmínimo para mostrar o número: 5\n"
+    pagina = montar_com_resumo(tmp_path, resumo)
+    assert "0 chamados não têm coordenada" in pagina
+    assert "nan" not in pagina.lower() and "inf" not in pagina.lower()
+
+
 def test_metodo_diz_a_definir_quando_a_coleta_nao_achou_chamado(tmp_path):
     pasta = agregado(tmp_path)
     resumo = RESUMO_DA_COLETA.replace("na base: 2026-10-30", "na base: nenhum")
@@ -473,7 +531,7 @@ def test_ajuda_em_portugues(capsys):
 
 
 def test_o_codigo_do_site_nao_depende_de_arquivo_fora_da_pasta(tmp_path):
-    # Abre com duplo clique (file://): nada de fetch, tudo por <script src="dados.js">.
+    # Os dados não são buscados pela rede: nada de fetch, tudo por <script src="dados.js">.
     _, site = montar(tmp_path)
     assert "fetch(" not in texto(site, "mapa.js")
     assert '<script src="dados.js">' in texto(site, "index.html")
