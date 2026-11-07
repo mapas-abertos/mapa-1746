@@ -43,6 +43,7 @@ COLUNAS_DO_RESUMO = ["lidos", "problema_publico", "sem_rua", "rua_fora_do_cadast
                      "coordenada_fora_do_municipio", "mais_recente"]
 COLUNAS_DO_DESENHO = ["bairro", "rua", "desenho"]
 COLUNAS_POR_SUBTIPO = ["tipo", "subtipo", "chamados"]
+DIMENSOES = ["tema", "status", "situacao", "tipo_situacao", "prazo", "orgao"]
 
 # Classificação fictícia dos três pares da lista de exemplo: todos de problema público,
 # para os testes que já existiam (antes da issue #26) continuarem com os mesmos totais.
@@ -79,6 +80,11 @@ DUCKDB = Dialeto(
     dentro="({lon} BETWEEN -43.80 AND -43.09 AND {lat} BETWEEN -23.09 AND -22.74)",
     texto=lambda valor: "'" + valor.replace("'", "''") + "'",
     pares="(VALUES {linhas}) AS pares(tipo, subtipo)",
+    # Sem a extensão de mapas, o desenho de teste do bairro já é a caixa: "oeste,sul,leste,norte".
+    caixa=("struct_pack(xmin := CAST(split_part(MIN({coluna}), ',', 1) AS DOUBLE), "
+           "ymin := CAST(split_part(MIN({coluna}), ',', 2) AS DOUBLE), "
+           "xmax := CAST(split_part(MIN({coluna}), ',', 3) AS DOUBLE), "
+           "ymax := CAST(split_part(MIN({coluna}), ',', 4) AS DOUBLE))"),
 )
 
 
@@ -100,18 +106,47 @@ def desenho_de_teste(i, j):
                        "coordinates": [[lon, lat], [lon + 0.0012345678, lat + 0.0008765432]]})
 
 
+# Valores fictícios das colunas dos filtros (issue #31) quando a lista não traz a coluna.
+ORGAO_DO_TIPO = {
+    "Iluminação Pública": "Órgão Fictício da Luz",
+    "Limpeza": "Órgão Fictício da Limpeza",
+    "Conservação": "Órgão Fictício das Ruas",
+}
+
+# A caixa fictícia de cada bairro, em graus: oeste, sul, leste, norte.
+CAIXA_DO_BAIRRO = {
+    "Centro": (-43.19, -22.92, -43.16, -22.89),
+    "Tijuca": (-43.26, -22.94, -43.22, -22.91),
+    "Glória": (-43.18, -22.93, -43.17, -22.91),
+}
+
+
+def _filtros_da_linha(linha):
+    """status, situação, prazo e órgão do chamado: da lista, ou inventados a partir dele."""
+    fechado = bool(linha["data_fim"].strip())
+    return [
+        linha.get("status") or ("Fechado" if fechado else "Aberto"),
+        linha.get("situacao") or ("Encerrado" if fechado else "Não Encerrado"),
+        linha.get("dentro_prazo") or "No prazo",
+        linha.get("orgao") or ORGAO_DO_TIPO.get(linha["tipo"].strip(), "Órgão Fictício"),
+    ]
+
+
 def montar_base(texto, *, fora_do_cadastro=(), sem_desenho=()):
     """Cria no DuckDB as três tabelas a partir de uma lista no formato do agregador.
 
     Cada rua ganha um código de logradouro e dois trechos (como no cadastro de verdade).
-    Ruas em `fora_do_cadastro` ficam com código, mas sem trecho no cadastro.
+    Ruas em `fora_do_cadastro` ficam com código, mas sem trecho no cadastro. As colunas dos
+    filtros (status, situacao, dentro_prazo e orgao) podem vir na lista; sem elas, valem os
+    valores de _filtros_da_linha.
     """
     conexao = duckdb.connect()
     conexao.execute("""
         CREATE TABLE chamado (
             id_chamado VARCHAR, data_inicio TIMESTAMP, data_fim TIMESTAMP, tipo VARCHAR,
             subtipo VARCHAR, tipo_situacao VARCHAR, id_bairro VARCHAR, id_logradouro VARCHAR,
-            numero_logradouro BIGINT, latitude DOUBLE, longitude DOUBLE)""")
+            numero_logradouro BIGINT, latitude DOUBLE, longitude DOUBLE, status VARCHAR,
+            situacao VARCHAR, dentro_prazo VARCHAR, nome_unidade_organizacional VARCHAR)""")
     conexao.execute("CREATE TABLE bairro (id_bairro BIGINT, nome VARCHAR, geometry VARCHAR)")
     conexao.execute("""
         CREATE TABLE logradouro (
@@ -130,13 +165,16 @@ def montar_base(texto, *, fora_do_cadastro=(), sem_desenho=()):
         else:
             id_logradouro = str(logradouros.setdefault((bairro, rua), 100 + len(logradouros)))
         conexao.execute(
-            "INSERT INTO chamado VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)",
+            "INSERT INTO chamado VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)",
             [f"CH-{90000 + numero}", _data(linha["data_inicio"]), _data(linha["data_fim"]),
              linha["tipo"], linha["subtipo"], linha["tipo_situacao"], str(id_bairro),
-             id_logradouro, 700 + numero, _numero(linha["latitude"]), _numero(linha["longitude"])],
+             id_logradouro, 700 + numero, _numero(linha["latitude"]), _numero(linha["longitude"]),
+             *_filtros_da_linha(linha)],
         )
     for bairro, id_bairro in bairros.items():
-        conexao.execute("INSERT INTO bairro VALUES (?, ?, NULL)", [id_bairro, bairro])
+        caixa = CAIXA_DO_BAIRRO.get(bairro)
+        conexao.execute("INSERT INTO bairro VALUES (?, ?, ?)",
+                        [id_bairro, bairro, ",".join(map(str, caixa)) if caixa else None])
     trecho = 0
     for i, ((bairro, rua), id_logradouro) in enumerate(logradouros.items()):
         if rua in fora_do_cadastro:
@@ -197,23 +235,23 @@ class ClienteFalso:
         return Trabalho(Resultado(linhas, colunas))
 
 
-def rodar(tmp_path, texto=LISTA_EXEMPLO, minimo=5, *, cliente=None,
+def rodar(tmp_path, texto=LISTA_EXEMPLO, *, cliente=None,
           classificacao=CLASSIFICACAO_DO_EXEMPLO, **opcoes):
     cliente = cliente or ClienteFalso(montar_base(texto))
     saida = tmp_path / "coleta"
     avisos = []
     resumo = coletar(
-        cliente, saida, minimo=minimo, classificacao=classificacao, dialeto=DUCKDB, hoje=HOJE,
+        cliente, saida, classificacao=classificacao, dialeto=DUCKDB, hoje=HOJE,
         avisar=avisos.append, **opcoes
     )
     return resumo, saida, cliente, avisos
 
 
-def rodar_agregador(tmp_path, texto, minimo):
+def rodar_agregador(tmp_path, texto):
     entrada = tmp_path / "chamados.csv"
     entrada.write_text(texto, encoding="utf-8")
     saida = tmp_path / "agregador"
-    agregar(entrada, saida, minimo=minimo)
+    agregar(entrada, saida)
     return saida
 
 
@@ -229,11 +267,10 @@ def ler_json(caminho):
 # ---- A consulta segue a mesma regra do agregador --------------------------------------
 
 
-@pytest.mark.parametrize("minimo", [1, 5, 7])
-def test_coleta_grava_os_mesmos_arquivos_que_o_agregador(tmp_path, minimo):
-    # Total, atendidos, fechados e mediana por bairro e rua e por quadrado, e o "menos de N".
-    _, saida, _, _ = rodar(tmp_path, minimo=minimo)
-    do_agregador = rodar_agregador(tmp_path, LISTA_EXEMPLO, minimo)
+def test_coleta_grava_os_mesmos_arquivos_que_o_agregador(tmp_path):
+    # Total, atendidos, fechados e mediana por bairro e rua e por quadrado.
+    _, saida, _, _ = rodar(tmp_path)
+    do_agregador = rodar_agregador(tmp_path, LISTA_EXEMPLO)
     for nome in ("ruas.csv", "quadrados.csv", "quadrados.geojson"):
         assert (saida / nome).read_text(encoding="utf-8") == (
             do_agregador / nome
@@ -241,7 +278,7 @@ def test_coleta_grava_os_mesmos_arquivos_que_o_agregador(tmp_path, minimo):
 
 
 def test_exemplo_da_issue_da_a_linha_esperada_em_ruas_csv(tmp_path):
-    resumo, saida, _, _ = rodar(tmp_path, EXEMPLO_DA_ISSUE, minimo=1)
+    resumo, saida, _, _ = rodar(tmp_path, EXEMPLO_DA_ISSUE)
     linhas = (saida / "ruas.csv").read_text(encoding="utf-8").splitlines()
     assert linhas == [";".join(CABECALHO_RUAS), "Centro;Rua Exemplo;2;1;1;3.0"]
     assert resumo.sem_rua == 1
@@ -250,7 +287,7 @@ def test_exemplo_da_issue_da_a_linha_esperada_em_ruas_csv(tmp_path):
 
 def test_mediana_e_exata(tmp_path):
     # Tijuca, Rua A: fechados em 10, 4, 2 e 1 dias. A mediana exata é (2 + 4) / 2 = 3.
-    _, saida, _, _ = rodar(tmp_path, minimo=1)
+    _, saida, _, _ = rodar(tmp_path)
     ruas = {(r["bairro"], r["rua"]): r for r in ler_csv(saida / "ruas.csv")}
     assert ruas[("Tijuca", "Rua A")]["mediana_dias_ate_fechar"] == "3.0"
     assert ruas[("Centro", "Rua A")]["mediana_dias_ate_fechar"] == "1.5"
@@ -258,14 +295,14 @@ def test_mediana_e_exata(tmp_path):
 
 def test_rua_com_varios_trechos_no_cadastro_nao_conta_duas_vezes(tmp_path):
     # Cada rua da base fictícia tem dois trechos no cadastro de logradouros.
-    _, saida, _, _ = rodar(tmp_path, minimo=1)
+    _, saida, _, _ = rodar(tmp_path)
     total = sum(int(r["chamados"]) for r in ler_csv(saida / "ruas.csv"))
     assert total == 17  # 19 chamados, 2 sem rua
 
 
 def test_rua_fora_do_cadastro_conta_como_sem_rua(tmp_path):
     cliente = ClienteFalso(montar_base(LISTA_EXEMPLO, fora_do_cadastro={"Rua C"}))
-    resumo, saida, _, _ = rodar(tmp_path, minimo=1, cliente=cliente)
+    resumo, saida, _, _ = rodar(tmp_path, cliente=cliente)
     assert "Rua C" not in {r["rua"] for r in ler_csv(saida / "ruas.csv")}
     assert resumo.sem_rua == 3
     assert resumo.rua_fora_do_cadastro == 1
@@ -295,8 +332,8 @@ def lista_com_chamados_fora_do_rio():
 
 
 def test_chamado_fora_do_municipio_nao_entra_em_nenhum_quadrado(tmp_path):
-    _, saida, _, _ = rodar(tmp_path, lista_com_chamados_fora_do_rio(), minimo=1)
-    do_agregador = rodar_agregador(tmp_path, LISTA_EXEMPLO, 1)
+    _, saida, _, _ = rodar(tmp_path, lista_com_chamados_fora_do_rio())
+    do_agregador = rodar_agregador(tmp_path, LISTA_EXEMPLO)
     for nome in ("quadrados.csv", "quadrados.geojson"):
         assert (saida / nome).read_text(encoding="utf-8") == (
             do_agregador / nome
@@ -304,7 +341,7 @@ def test_chamado_fora_do_municipio_nao_entra_em_nenhum_quadrado(tmp_path):
 
 
 def test_chamado_fora_do_municipio_conta_como_sem_coordenada_com_linha_propria(tmp_path):
-    resumo, saida, _, _ = rodar(tmp_path, lista_com_chamados_fora_do_rio(), minimo=1)
+    resumo, saida, _, _ = rodar(tmp_path, lista_com_chamados_fora_do_rio())
     assert resumo.lidos == 19 + 4
     assert resumo.sem_coordenada == 4 + 4
     assert resumo.coordenada_fora_do_municipio == 4
@@ -314,7 +351,7 @@ def test_chamado_fora_do_municipio_conta_como_sem_coordenada_com_linha_propria(t
 
 
 def test_chamado_fora_do_municipio_continua_contando_na_rua(tmp_path):
-    _, saida, _, _ = rodar(tmp_path, lista_com_chamados_fora_do_rio(), minimo=1)
+    _, saida, _, _ = rodar(tmp_path, lista_com_chamados_fora_do_rio())
     ruas = {(r["bairro"], r["rua"]): r for r in ler_csv(saida / "ruas.csv")}
     assert ruas[("Centro", "Rua A")]["chamados"] == "10"  # 6 do exemplo e os 4 de fora
 
@@ -423,8 +460,8 @@ def test_pontos_perto_da_borda_caem_no_mesmo_quadrado_que_no_agregador(tmp_path)
         f"2025-03-01 08:00;;Limpeza;Remoção de entulho;Não consta;Centro;Rua A;{lat};{lon}\n"
         for lon, lat in pontos_perto_da_borda()
     )
-    _, saida, _, _ = rodar(tmp_path, texto, minimo=1)
-    do_agregador = rodar_agregador(tmp_path, texto, 1)
+    _, saida, _, _ = rodar(tmp_path, texto)
+    do_agregador = rodar_agregador(tmp_path, texto)
     assert (saida / "quadrados.csv").read_text(encoding="utf-8") == (
         do_agregador / "quadrados.csv"
     ).read_text(encoding="utf-8")
@@ -442,6 +479,11 @@ def test_cada_consulta_devolve_so_as_colunas_do_formato_de_saida(tmp_path):
         "resumo": COLUNAS_DO_RESUMO,
         "desenho_das_ruas": COLUNAS_DO_DESENHO,
         "por_subtipo": COLUNAS_POR_SUBTIPO,
+        "prazo_por_situacao": ["prazo", "situacao", "chamados"],
+        "caixas_dos_bairros": ["bairro", "oeste", "sul", "leste", "norte"],
+        "filtros_por_dia": ["quadrado", "dia", *DIMENSOES, "chamados", "fechados"],
+        "filtros_por_ano": ["quadrado", "ano", *DIMENSOES, "chamados", "fechados"],
+        "filtros_tudo": ["quadrado", *DIMENSOES, "chamados", "fechados"],
     }
     assert set(consultas) == set(esperadas)
     for nome, colunas in esperadas.items():
@@ -451,9 +493,10 @@ def test_cada_consulta_devolve_so_as_colunas_do_formato_de_saida(tmp_path):
 
 
 def test_desenho_das_ruas_nao_le_a_tabela_de_chamados():
-    consulta = montar_consultas(BIGQUERY, CLASSIFICACAO_DO_EXEMPLO)["desenho_das_ruas"]
-    assert "adm_central_atendimento_1746" not in consulta
-    assert "latitude" not in consulta and "longitude" not in consulta
+    for nome in ("desenho_das_ruas", "caixas_dos_bairros"):
+        consulta = montar_consultas(BIGQUERY, CLASSIFICACAO_DO_EXEMPLO)[nome]
+        assert "adm_central_atendimento_1746" not in consulta, nome
+        assert "latitude" not in consulta and "longitude" not in consulta, nome
 
 
 def test_coleta_para_se_a_consulta_devolver_coluna_a_mais(tmp_path):
@@ -464,7 +507,7 @@ def test_coleta_para_se_a_consulta_devolver_coluna_a_mais(tmp_path):
 
 
 def test_nenhuma_saida_tem_coordenada_identificador_ou_numero_de_porta(tmp_path):
-    _, saida, _, _ = rodar(tmp_path, minimo=1)
+    _, saida, _, _ = rodar(tmp_path)
     conexao = montar_base(LISTA_EXEMPLO)
     proibidos = set()
     for id_chamado, porta, latitude, longitude in conexao.sql(
@@ -474,8 +517,8 @@ def test_nenhuma_saida_tem_coordenada_identificador_ou_numero_de_porta(tmp_path)
         proibidos |= {repr(v) for v in (latitude, longitude) if v}
     arquivos = {a.name for a in saida.iterdir()}
     assert arquivos == {"ruas.csv", "quadrados.csv", "quadrados.geojson", "ruas.geojson",
-                        "resumo.txt"}
-    for arquivo in saida.iterdir():
+                        "resumo.txt", "filtros"}
+    for arquivo in saida.rglob("*.*"):
         texto = arquivo.read_text(encoding="utf-8")
         for proibido in proibidos:
             assert not re.search(rf"(?<![\d.]){re.escape(proibido)}(?![\d])", texto), (
@@ -487,7 +530,7 @@ def test_nenhuma_saida_tem_coordenada_identificador_ou_numero_de_porta(tmp_path)
 
 
 def test_ruas_geojson_traz_o_desenho_e_os_mesmos_totais_do_csv(tmp_path):
-    _, saida, _, _ = rodar(tmp_path, minimo=5)
+    _, saida, _, _ = rodar(tmp_path)
     geojson = ler_json(saida / "ruas.geojson")
     assert geojson["type"] == "FeatureCollection"
     do_csv = {(r["bairro"], r["rua"]): r for r in ler_csv(saida / "ruas.csv")}
@@ -500,11 +543,11 @@ def test_ruas_geojson_traz_o_desenho_e_os_mesmos_totais_do_csv(tmp_path):
             valor = feature["properties"][coluna]
             assert do_csv[chave][coluna] == ("" if valor is None else str(valor)), (chave, coluna)
         assert feature["geometry"]["type"] == "LineString"
-    assert do_geojson[("Glória", "Rua C")]["properties"]["chamados"] == "menos de 5"
+    assert do_geojson[("Glória", "Rua C")]["properties"]["chamados"] == 1
 
 
 def test_ruas_geojson_arredonda_o_desenho_em_6_casas(tmp_path):
-    _, saida, _, _ = rodar(tmp_path, minimo=1)
+    _, saida, _, _ = rodar(tmp_path)
     for feature in ler_json(saida / "ruas.geojson")["features"]:
         for ponto in feature["geometry"]["coordinates"]:
             for numero in ponto:
@@ -513,7 +556,7 @@ def test_ruas_geojson_arredonda_o_desenho_em_6_casas(tmp_path):
 
 def test_rua_sem_desenho_fica_so_no_csv(tmp_path):
     cliente = ClienteFalso(montar_base(LISTA_EXEMPLO, sem_desenho={"Rua C"}))
-    resumo, saida, _, _ = rodar(tmp_path, minimo=1, cliente=cliente)
+    resumo, saida, _, _ = rodar(tmp_path, cliente=cliente)
     ruas = {f["properties"]["rua"] for f in ler_json(saida / "ruas.geojson")["features"]}
     assert "Rua C" not in ruas
     assert "Rua C" in {r["rua"] for r in ler_csv(saida / "ruas.csv")}
@@ -523,43 +566,47 @@ def test_rua_sem_desenho_fica_so_no_csv(tmp_path):
 # ---- Simulação (dry run) antes de rodar, com limite configurável ----------------------
 
 
+QUANTAS = len(montar_consultas(DUCKDB, CLASSIFICACAO_DO_EXEMPLO))
+
+
 def test_simulacao_vem_antes_de_tudo_e_mostra_os_gb(tmp_path):
     _, _, cliente, avisos = rodar(tmp_path)
     tipos = [tipo for tipo, _, _ in cliente.eventos]
-    assert tipos == ["simulação"] * 5 + ["consulta"] * 5
-    for _, _, configuracao in cliente.eventos[:5]:
+    assert tipos == ["simulação"] * QUANTAS + ["consulta"] * QUANTAS
+    for _, _, configuracao in cliente.eventos[:QUANTAS]:
         assert configuracao.use_query_cache is False
-    # 5 consultas de 0,5 GB cada.
-    assert any("2,5 GB" in aviso for aviso in avisos), avisos
+    # Consultas de 0,5 GB cada.
+    assert any(f"{coleta._gb(QUANTAS / 2)} GB" in aviso for aviso in avisos), avisos
 
 
 def test_para_antes_de_rodar_se_passar_do_limite(tmp_path):
     cliente = ClienteFalso(montar_base(LISTA_EXEMPLO), bytes_por_consulta=3 * GIB)
     with pytest.raises(LimiteExcedido) as erro:
         rodar(tmp_path, cliente=cliente, limite_gb=10)
-    assert "15,0 GB" in str(erro.value) and "10" in str(erro.value)
+    assert f"{coleta._gb(3 * QUANTAS)} GB" in str(erro.value) and "10" in str(erro.value)
     assert "O que fazer:" in str(erro.value)
-    assert [tipo for tipo, _, _ in cliente.eventos] == ["simulação"] * 5
+    assert [tipo for tipo, _, _ in cliente.eventos] == ["simulação"] * QUANTAS
     assert not (tmp_path / "coleta").exists()
 
 
 def test_consulta_de_verdade_tambem_tem_o_limite(tmp_path):
-    _, _, cliente, _ = rodar(tmp_path, limite_gb=3)
+    # Cada consulta do teste lê 0,5 GB: o limite cabe todas.
+    _, _, cliente, _ = rodar(tmp_path, limite_gb=QUANTAS)
     for tipo, _, configuracao in cliente.eventos:
         if tipo == "consulta":
-            assert configuracao.maximum_bytes_billed == 3 * GIB
+            assert configuracao.maximum_bytes_billed == QUANTAS * GIB
 
 
 def test_limite_vem_da_linha_de_comando(tmp_path, capsys):
     cliente = ClienteFalso(montar_base(LISTA_EXEMPLO), bytes_por_consulta=3 * GIB)
     codigo = main(
-        ["--projeto", "projeto-de-teste", "--minimo", "5", "--saida", str(tmp_path / "s"),
+        ["--projeto", "projeto-de-teste", "--saida", str(tmp_path / "s"),
          "--limite-gb", "11"],
         abrir=lambda projeto: cliente, dialeto=DUCKDB,
     )
     assert codigo != 0
     erro = capsys.readouterr().err
-    assert "15,0 GB" in erro and "11" in erro
+    assert f"{coleta._gb(3 * QUANTAS)} GB" in erro and "11" in erro
     assert not (tmp_path / "s").exists()
 
 
@@ -575,14 +622,15 @@ def test_limite_menor_que_1_gb_aparece_como_foi_pedido(tmp_path):
     cliente = ClienteFalso(montar_base(LISTA_EXEMPLO), bytes_por_consulta=1024**2)
     with pytest.raises(LimiteExcedido) as erro:
         rodar(tmp_path, cliente=cliente, limite_gb=0.001)
-    # 5 consultas de 1 MB cada: 0,0049 GB, acima de 0,001 GB.
-    assert "0,0049 GB" in str(erro.value) and "limite de 0,001 GB" in str(erro.value)
+    # Consultas de 1 MB cada, acima de 0,001 GB.
+    assert f"{coleta._gb(QUANTAS / 1024)} GB" in str(erro.value)
+    assert "limite de 0,001 GB" in str(erro.value)
 
 
 def test_limite_com_virgula_ou_ponto_pela_linha_de_comando(tmp_path, capsys):
     for limite in ("0,001", "0.001"):
         cliente = ClienteFalso(montar_base(LISTA_EXEMPLO), bytes_por_consulta=1024**2)
-        codigo = main(["--projeto", "p", "--minimo", "5", "--saida", str(tmp_path / "s"),
+        codigo = main(["--projeto", "p", "--saida", str(tmp_path / "s"),
                        "--limite-gb", limite], abrir=lambda projeto: cliente, dialeto=DUCKDB)
         assert codigo != 0
         assert "limite: 0,001 GB" in capsys.readouterr().out
@@ -592,19 +640,33 @@ def test_limite_padrao_cabe_no_sandbox_gratuito():
     assert 0 < coleta.LIMITE_GB_PADRAO <= 1024 / 10  # pelo menos 10 coletas no 1 TB do mês
 
 
-# ---- Mínimo, como no agregador --------------------------------------------------------
+# ---- Sem mínimo de chamados (issue #31) ----------------------------------------------
+
+MENSAGEM_DO_MINIMO = "A opção --minimo saiu (ver decisoes.md). Rode sem ela."
 
 
-def test_minimo_tem_de_ser_pelo_menos_1(tmp_path):
-    with pytest.raises(ValueError, match="mínimo"):
-        rodar(tmp_path, minimo=0)
+def test_quadrado_com_1_chamado_mostra_1_e_nao_menos_de_n(tmp_path):
+    linhas = LISTA_EXEMPLO.splitlines()
+    _, saida, _, _ = rodar(tmp_path, "\n".join([linhas[0], linhas[9]]) + "\n")
+    (linha,) = ler_csv(saida / "quadrados.csv")
+    assert linha["chamados"] == "1"
+    (feature,) = ler_json(saida / "quadrados.geojson")["features"]
+    assert feature["properties"]["chamados"] == 1
+    for arquivo in saida.rglob("*.*"):
+        assert "menos de" not in arquivo.read_text(encoding="utf-8"), arquivo.name
 
 
-def test_quadrado_abaixo_do_minimo_sai_como_menos_de_n(tmp_path):
-    _, saida, _, _ = rodar(tmp_path, minimo=5)
-    linha = {q["quadrado"]: q for q in ler_csv(saida / "quadrados.csv")}["687400_7465600"]
-    assert linha["chamados"] == "menos de 5"
-    assert linha["atendidos"] == linha["fechados"] == linha["mediana_dias_ate_fechar"] == ""
+def test_rua_com_1_chamado_mostra_o_numero(tmp_path):
+    _, saida, _, _ = rodar(tmp_path)
+    linha = {(r["bairro"], r["rua"]): r for r in ler_csv(saida / "ruas.csv")}[("Glória", "Rua C")]
+    assert linha["chamados"] == "1"
+
+
+def test_linha_de_comando_com_minimo_para_e_diz_que_a_opcao_saiu(capsys):
+    for argumentos in (["--minimo", "5"], ["--minimo"]):
+        codigo, mensagem = rodar_comando(capsys, "--projeto", "p", *argumentos)
+        assert codigo != 0
+        assert MENSAGEM_DO_MINIMO in mensagem
 
 
 # ---- Resumo ---------------------------------------------------------------------------
@@ -621,14 +683,14 @@ def test_resumo_traz_lidos_sem_rua_sem_coordenada_e_as_datas(tmp_path):
         "coordenada fora do município: 0",
         "chamado mais recente na base: 2025-07-01",
         "data da coleta: 2026-11-05",
-        "mínimo para mostrar o número: 5",
         "datario.adm_central_atendimento_1746.chamado",
     ):
         assert trecho in texto, f"o resumo não traz \"{trecho}\""
+    assert "mínimo" not in texto
 
 
 def test_total_dos_quadrados_e_lidos_menos_sem_coordenada(tmp_path):
-    resumo, saida, _, _ = rodar(tmp_path, minimo=1)
+    resumo, saida, _, _ = rodar(tmp_path)
     total = sum(int(q["chamados"]) for q in ler_csv(saida / "quadrados.csv"))
     assert total == resumo.lidos - resumo.sem_coordenada == 15
 
@@ -645,7 +707,7 @@ def test_pasta_padrao_fica_em_dados_que_nao_vai_para_o_github():
 def test_sem_saida_grava_na_pasta_padrao(tmp_path, monkeypatch):
     monkeypatch.setattr(coleta, "PASTA_PADRAO", tmp_path / "padrao")
     cliente = ClienteFalso(montar_base(LISTA_EXEMPLO))
-    codigo = main(["--projeto", "p", "--minimo", "5"], abrir=lambda projeto: cliente,
+    codigo = main(["--projeto", "p"], abrir=lambda projeto: cliente,
                   dialeto=DUCKDB)
     assert codigo == 0
     assert (tmp_path / "padrao" / "ruas.csv").exists()
@@ -657,8 +719,11 @@ def test_sem_saida_grava_na_pasta_padrao(tmp_path, monkeypatch):
 def test_codigo_nao_tem_chave_nem_arquivo_de_credencial():
     fonte = (RAIZ / "src" / "coleta.py").read_text(encoding="utf-8").lower()
     for proibido in ("service_account", "private_key", "google_application_credentials",
-                     "keyfile", "client_secret", ".json\""):
+                     "keyfile", "client_secret", "credentials.json", "token.json"):
         assert proibido not in fonte, f"o código cita {proibido}"
+    # O único .json da coleta é o das fatias dos filtros (issue #31), num lugar só.
+    assert fonte.count('.json"') == 1
+    assert 'extensao_das_fatias = ".json"' in fonte
 
 
 def test_login_e_o_do_responsavel_pelo_navegador(monkeypatch):
@@ -701,24 +766,18 @@ def confere_mensagem(codigo, mensagem, *trechos):
         assert ingles not in mensagem.lower(), f"mensagem em inglês: {mensagem}"
 
 
-def test_sem_minimo_diz_em_portugues_o_que_fazer(capsys):
-    codigo, mensagem = rodar_comando(capsys, "--projeto", "p")
-    confere_mensagem(codigo, mensagem, "Falta o --minimo", "--minimo 5")
-
-
 def test_sem_projeto_diz_em_portugues_o_que_fazer(capsys):
-    codigo, mensagem = rodar_comando(capsys, "--minimo", "5")
+    codigo, mensagem = rodar_comando(capsys)
     confere_mensagem(codigo, mensagem, "Falta o --projeto")
 
 
 def test_limite_que_nao_e_numero_diz_em_portugues_o_que_fazer(capsys):
-    codigo, mensagem = rodar_comando(capsys, "--projeto", "p", "--minimo", "5",
-                                     "--limite-gb", "dez")
+    codigo, mensagem = rodar_comando(capsys, "--projeto", "p", "--limite-gb", "dez")
     confere_mensagem(codigo, mensagem, "--limite-gb")
 
 
 def test_opcao_desconhecida_diz_em_portugues_o_que_fazer(capsys):
-    codigo, mensagem = rodar_comando(capsys, "--projeto", "p", "--minimo", "5", "--cor", "azul")
+    codigo, mensagem = rodar_comando(capsys, "--projeto", "p", "--cor", "azul")
     confere_mensagem(codigo, mensagem, "--cor", "coleta.py --ajuda")
 
 
@@ -727,7 +786,8 @@ def test_ajuda_em_portugues(capsys):
         main(["--ajuda"])
     assert saida.value.code == 0
     ajuda = capsys.readouterr().out
-    assert "uso:" in ajuda and "--minimo" in ajuda and "--limite-gb" in ajuda
+    assert "uso:" in ajuda and "--limite-gb" in ajuda
+    assert "--minimo" not in ajuda
     for ingles in INGLES:
         assert ingles not in ajuda.lower(), f"ajuda em inglês: {ingles}"
 
@@ -776,7 +836,7 @@ def test_exemplo_da_issue_26_a_rua_sai_so_com_os_chamados_de_problema_publico(tm
         chamado("Estacionamento Irregular", "Carro na calçada") * 2,
         chamado("Tipo Novo", "Subtipo novo"),
     )
-    resumo, saida, _, _ = rodar(tmp_path, texto, minimo=1, classificacao=CLASSIFICACAO_FICTICIA)
+    resumo, saida, _, _ = rodar(tmp_path, texto, classificacao=CLASSIFICACAO_FICTICIA)
     linhas = (saida / "ruas.csv").read_text(encoding="utf-8").splitlines()
     assert linhas[1:] == ["Centro;Rua A;3;3;3;1.0"]
     assert sum(int(q["chamados"]) for q in ler_csv(saida / "quadrados.csv")) == 3
@@ -799,7 +859,7 @@ def chamados_dos_cinco_grupos_e_sem_classificacao():
 
 
 def test_so_os_chamados_de_problema_publico_entram_nas_ruas_e_nos_quadrados(tmp_path):
-    _, saida, _, _ = rodar(tmp_path, chamados_dos_cinco_grupos_e_sem_classificacao(), minimo=1,
+    _, saida, _, _ = rodar(tmp_path, chamados_dos_cinco_grupos_e_sem_classificacao(),
                            classificacao=CLASSIFICACAO_FICTICIA)
     ruas = ler_csv(saida / "ruas.csv")
     assert [(r["rua"], r["chamados"]) for r in ruas] == [("Rua A", "3")]
@@ -811,7 +871,7 @@ def test_so_os_chamados_de_problema_publico_entram_nas_ruas_e_nos_quadrados(tmp_
 
 def test_resumo_diz_quantos_ficaram_fora_do_mapa_em_cada_grupo(tmp_path):
     resumo, saida, _, _ = rodar(tmp_path, chamados_dos_cinco_grupos_e_sem_classificacao(),
-                                minimo=1, classificacao=CLASSIFICACAO_FICTICIA)
+                                classificacao=CLASSIFICACAO_FICTICIA)
     assert resumo.lidos == 21
     assert resumo.problema_publico == 3
     assert resumo.fora_do_mapa == {"denuncia": 2, "pessoal": 4, "sem_lugar": 1, "a_revisar": 5,
@@ -825,7 +885,7 @@ def test_resumo_diz_quantos_ficaram_fora_do_mapa_em_cada_grupo(tmp_path):
 
 def test_resumo_lista_os_pares_sem_classificacao_para_completar_a_lista(tmp_path):
     resumo, saida, _, _ = rodar(tmp_path, chamados_dos_cinco_grupos_e_sem_classificacao(),
-                                minimo=1, classificacao=CLASSIFICACAO_FICTICIA)
+                                classificacao=CLASSIFICACAO_FICTICIA)
     assert resumo.sem_classificacao == [("Tipo Novo", "Subtipo novo", 4),
                                         ("Outro Tipo Novo", "Outro subtipo", 2)]
     texto = texto_do_resumo(saida)
@@ -852,7 +912,7 @@ def test_sem_rua_e_sem_coordenada_contam_so_os_chamados_de_problema_publico(tmp_
         chamado("Estacionamento Irregular", "Carro na calçada", rua="", latitude="",
                 longitude="") * 5,
     )
-    resumo, saida, _, _ = rodar(tmp_path, texto, minimo=1, classificacao=CLASSIFICACAO_FICTICIA)
+    resumo, saida, _, _ = rodar(tmp_path, texto, classificacao=CLASSIFICACAO_FICTICIA)
     assert resumo.sem_rua == 1 and resumo.sem_coordenada == 1
     total = sum(int(q["chamados"]) for q in ler_csv(saida / "quadrados.csv"))
     assert total == resumo.problema_publico - resumo.sem_coordenada == 3
@@ -890,7 +950,7 @@ def test_compara_tipo_e_subtipo_sem_os_espacos_do_comeco_e_do_fim(tmp_path):
         chamado("Iluminação Pública ", "Reparo de lâmpada apagada"),
         chamado("Estacionamento Irregular   ", "  Carro na calçada"),
     )
-    resumo, saida, _, _ = rodar(tmp_path, texto, minimo=1, classificacao=classificacao)
+    resumo, saida, _, _ = rodar(tmp_path, texto, classificacao=classificacao)
     assert resumo.problema_publico == 3
     assert resumo.fora_do_mapa["denuncia"] == 1
     assert resumo.fora_do_mapa["sem classificação"] == 0
@@ -906,7 +966,7 @@ def test_par_que_so_se_repete_pelos_espacos_conta_uma_vez(tmp_path):
     classificacao = ler_classificacao(caminho)
     assert classificacao == {("Transporte Escolar", "Inclusão de Veículo"): "publico"}
     texto = lista_de_chamados(chamado("Transporte Escolar", "Inclusão de Veículo"))
-    _, saida, _, _ = rodar(tmp_path, texto, minimo=1, classificacao=classificacao)
+    _, saida, _, _ = rodar(tmp_path, texto, classificacao=classificacao)
     assert ler_csv(saida / "ruas.csv")[0]["chamados"] == "1"
 
 
@@ -918,7 +978,7 @@ def test_subtipo_com_apostrofo_funciona(tmp_path):
     subtipo = f"Benefício {APOSTROFO}causa mortis{APOSTROFO}"
     classificacao = {("Táxi", subtipo): "publico"}
     texto = lista_de_chamados(chamado("Táxi", subtipo) * 2)
-    resumo, _, _, _ = rodar(tmp_path, texto, minimo=1, classificacao=classificacao)
+    resumo, _, _, _ = rodar(tmp_path, texto, classificacao=classificacao)
     assert resumo.problema_publico == 2
     # No BigQuery, o apóstrofo vai com barra invertida antes, e a barra invertida também.
     assert BIGQUERY.texto(f"OPM{APOSTROFO}s") == f"{APOSTROFO}OPM{BARRA}{APOSTROFO}s{APOSTROFO}"
@@ -927,7 +987,7 @@ def test_subtipo_com_apostrofo_funciona(tmp_path):
 
 def test_chamado_sem_subtipo_fica_sem_classificacao(tmp_path):
     texto = lista_de_chamados(chamado("Iluminação Pública", ""))
-    resumo, _, _, _ = rodar(tmp_path, texto, minimo=1, classificacao=CLASSIFICACAO_FICTICIA)
+    resumo, _, _, _ = rodar(tmp_path, texto, classificacao=CLASSIFICACAO_FICTICIA)
     assert resumo.problema_publico == 0
     assert resumo.sem_classificacao == [("Iluminação Pública", "", 1)]
 
@@ -980,7 +1040,7 @@ def test_coleta_le_a_lista_do_repositorio_por_padrao(tmp_path, monkeypatch):
     monkeypatch.setattr(coleta, "CLASSIFICACAO_PADRAO", lista)
     cliente = ClienteFalso(montar_base(LISTA_EXEMPLO))
     saida = tmp_path / "s"
-    codigo = main(["--projeto", "p", "--minimo", "1", "--saida", str(saida)],
+    codigo = main(["--projeto", "p", "--saida", str(saida)],
                   abrir=lambda projeto: cliente, dialeto=DUCKDB)
     assert codigo == 0
     assert [(r["bairro"], r["rua"]) for r in ler_csv(saida / "ruas.csv")] == [("Tijuca", "Rua A")]
@@ -992,7 +1052,7 @@ def test_lista_pode_vir_de_outro_arquivo_pela_linha_de_comando(tmp_path):
     ]) + "\n")
     cliente = ClienteFalso(montar_base(LISTA_EXEMPLO))
     saida = tmp_path / "s"
-    codigo = main(["--projeto", "p", "--minimo", "1", "--saida", str(saida),
+    codigo = main(["--projeto", "p", "--saida", str(saida),
                    "--classificacao", str(lista)], abrir=lambda projeto: cliente, dialeto=DUCKDB)
     assert codigo == 0
     assert {r["rua"] for r in ler_csv(saida / "ruas.csv")} == {"Rua B"}
@@ -1029,7 +1089,7 @@ def test_lista_que_nao_esta_em_utf8_diz_o_que_fazer(tmp_path):
 
 
 def test_sem_a_lista_a_coleta_para_antes_de_abrir_o_bigquery(tmp_path, capsys):
-    codigo, mensagem = rodar_comando(capsys, "--projeto", "p", "--minimo", "5",
+    codigo, mensagem = rodar_comando(capsys, "--projeto", "p",
                                      "--classificacao", str(tmp_path / "nao_existe.csv"))
     confere_mensagem(codigo, mensagem, "lista de classificação", "nao_existe.csv")
 
@@ -1038,7 +1098,7 @@ def test_pagina_de_metodo_le_o_resumo_que_a_coleta_grava(tmp_path):
     # As duas pontas juntas: o resumo da coleta, com os grupos, lido pelo montador do site.
     from montar_site import montar_site
 
-    _, saida, _, _ = rodar(tmp_path, chamados_dos_cinco_grupos_e_sem_classificacao(), minimo=1,
+    _, saida, _, _ = rodar(tmp_path, chamados_dos_cinco_grupos_e_sem_classificacao(),
                            classificacao=CLASSIFICACAO_FICTICIA)
     site = tmp_path / "site"
     montar_site(saida, site)
@@ -1048,3 +1108,196 @@ def test_pagina_de_metodo_le_o_resumo_que_a_coleta_grava(tmp_path):
     assert "Denúncia, que pode apontar vizinho, carro, obra, estabelecimento ou imóvel: 2 chamados" in pagina
     assert "Subtipo que não está na lista de classificação: 6 chamados" in pagina
     assert "LGPD" in pagina
+
+
+# ---- Fatias dos filtros do mapa (issue #31) -------------------------------------------
+
+# O que cada linha de uma fatia pode ter. Nada além disso sai na pasta filtros/.
+COLUNAS_DAS_FATIAS = {"q", "d", "t", "e", "p", "o", "n", "f"}
+
+
+def fatias(saida):
+    pasta = saida / "filtros"
+    return {arquivo.name: ler_json(arquivo) for arquivo in sorted(pasta.glob("*.json"))
+            if arquivo.name != "indice.json"}
+
+
+def linhas_da_fatia(fatia):
+    """As linhas da fatia, com o "q" já como posição do quadrado (soma das diferenças)."""
+    colunas = list(fatia)
+    tamanho = len(fatia["q"])
+    assert all(len(fatia[c]) == tamanho for c in colunas), "colunas de tamanhos diferentes"
+    linhas, quadrado = [], 0
+    for i in range(tamanho):
+        linha = {c: fatia[c][i] for c in colunas}
+        quadrado += linha["q"]
+        linha["q"] = quadrado
+        linhas.append(linha)
+    return linhas
+
+
+def somar_fatia(fatia, indice, **filtro):
+    """{quadrado: [chamados, atendidos, fechados]} da fatia, com o filtro (nome: [valores])."""
+    listas = {"t": indice["temas"], "p": indice["prazos"], "o": indice["orgaos"]}
+    nomes = {"tema": "t", "prazo": "p", "orgao": "o"}
+    totais = {}
+    for linha in linhas_da_fatia(fatia):
+        if any(listas[nomes[nome]][linha[nomes[nome]]] not in valores
+               for nome, valores in filtro.items()):
+            continue
+        quadrado = indice["quadrados"][linha["q"]]
+        atendido = indice["estados"][linha["e"]][2] == "Atendido"
+        soma = totais.setdefault(quadrado, [0, 0, 0])
+        soma[0] += linha["n"]
+        soma[1] += linha["n"] if atendido else 0
+        soma[2] += linha["f"]
+    return totais
+
+
+def test_coleta_grava_as_fatias_por_mes_por_ano_e_tudo(tmp_path):
+    _, saida, _, _ = rodar(tmp_path)
+    nomes = {arquivo.name for arquivo in (saida / "filtros").iterdir()}
+    # Os chamados com coordenada do exemplo são de março a junho de 2025.
+    assert nomes == {"indice.json", "tudo.json", "2025.json", "2025-03.json", "2025-04.json",
+                     "2025-05.json", "2025-06.json"}
+    indice = ler_json(saida / "filtros" / "indice.json")
+    assert indice["meses"] == ["2025-03", "2025-04", "2025-05", "2025-06"]
+    assert indice["anos"] == [2025]
+
+
+def test_sem_filtro_as_fatias_somam_os_mesmos_totais_dos_quadrados(tmp_path):
+    _, saida, _, _ = rodar(tmp_path)
+    indice = ler_json(saida / "filtros" / "indice.json")
+    esperado = {q["quadrado"]: [int(q["chamados"]), int(q["atendidos"]), int(q["fechados"])]
+                for q in ler_csv(saida / "quadrados.csv")}
+    todas = fatias(saida)
+    assert somar_fatia(todas["tudo.json"], indice) == esperado
+    assert somar_fatia(todas["2025.json"], indice) == esperado
+    por_mes = {}
+    for nome, fatia in todas.items():
+        if re.fullmatch(r"\d{4}-\d{2}\.json", nome):
+            for quadrado, soma in somar_fatia(fatia, indice).items():
+                total = por_mes.setdefault(quadrado, [0, 0, 0])
+                for i, valor in enumerate(soma):
+                    total[i] += valor
+    assert por_mes == esperado
+
+
+def test_com_tema_a_fatia_soma_so_os_chamados_do_tema(tmp_path):
+    _, saida, _, _ = rodar(tmp_path)
+    indice = ler_json(saida / "filtros" / "indice.json")
+    tudo = fatias(saida)["tudo.json"]
+    # Q2 (687400_7465600): 2 chamados da Limpeza na Rua B e 2 sem rua, também da Limpeza.
+    assert somar_fatia(tudo, indice, tema=["Limpeza"]) == {"687400_7465600": [4, 1, 1]}
+    assert somar_fatia(tudo, indice, tema=["Conservação"]) == {"680000_7464000": [5, 3, 4]}
+
+
+def test_a_fatia_do_mes_traz_o_dia_de_abertura(tmp_path):
+    _, saida, _, _ = rodar(tmp_path)
+    linhas = linhas_da_fatia(fatias(saida)["2025-05.json"])
+    # Tijuca: abertos de 1 a 5 de maio de 2025, um por dia.
+    assert sorted(linha["d"] for linha in linhas) == [1, 2, 3, 4, 5]
+    assert "d" not in fatias(saida)["2025.json"] and "d" not in fatias(saida)["tudo.json"]
+
+
+def test_as_fatias_so_tem_as_colunas_dos_totais(tmp_path):
+    _, saida, _, _ = rodar(tmp_path)
+    for nome, fatia in fatias(saida).items():
+        assert set(fatia) <= COLUNAS_DAS_FATIAS, f"{nome}: {set(fatia) - COLUNAS_DAS_FATIAS}"
+        for coluna, valores in fatia.items():
+            assert all(isinstance(valor, int) for valor in valores), (nome, coluna)
+
+
+def test_indice_so_tem_as_listas_dos_filtros(tmp_path):
+    _, saida, _, _ = rodar(tmp_path)
+    indice = ler_json(saida / "filtros" / "indice.json")
+    assert set(indice) == {"formato", "quadrados", "temas", "estados", "prazos", "orgaos", "meses",
+                           "anos", "primeiro_dia", "ultimo_dia", "bairros"}
+    assert indice["quadrados"] == [q["quadrado"] for q in ler_csv(saida / "quadrados.csv")]
+    assert sorted(indice["temas"]) == ["Conservação", "Iluminação Pública", "Limpeza"]
+    assert sorted(indice["prazos"]) == ["No prazo"]
+    assert sorted(indice["orgaos"]) == sorted(ORGAO_DO_TIPO.values())
+    assert ["Fechado", "Encerrado", "Atendido"] in indice["estados"]
+
+
+def test_a_lista_de_tema_nao_tem_tipo_de_fora_do_grupo_publico(tmp_path):
+    texto = lista_de_chamados(
+        chamado("Iluminação Pública", "Reparo de lâmpada apagada"),
+        chamado("Estacionamento Irregular", "Carro na calçada"),
+        chamado("Remoção Gratuita", "Móveis da casa"),
+        chamado("Tipo Em Revisão", "Subtipo em revisão"),
+        chamado("Tipo Sem Lista", "Subtipo sem lista"),
+    )
+    _, saida, _, _ = rodar(tmp_path, texto, classificacao=CLASSIFICACAO_FICTICIA)
+    indice = ler_json(saida / "filtros" / "indice.json")
+    assert indice["temas"] == ["Iluminação Pública"]
+    for arquivo in (saida / "filtros").iterdir():
+        texto_da_fatia = arquivo.read_text(encoding="utf-8")
+        for tipo in ("Estacionamento", "Remoção Gratuita", "Em Revisão", "Sem Lista"):
+            assert tipo not in texto_da_fatia, (arquivo.name, tipo)
+
+
+def test_indice_traz_o_primeiro_e_o_ultimo_dia_com_chamados(tmp_path):
+    _, saida, _, _ = rodar(tmp_path)
+    indice = ler_json(saida / "filtros" / "indice.json")
+    # Os chamados sem coordenada (até 01/07/2025) não entram no mapa nem no calendário.
+    assert indice["primeiro_dia"] == "2025-03-01"
+    assert indice["ultimo_dia"] == "2025-06-02"
+
+
+def test_indice_traz_a_caixa_de_cada_bairro_do_cadastro(tmp_path):
+    _, saida, _, _ = rodar(tmp_path)
+    bairros = ler_json(saida / "filtros" / "indice.json")["bairros"]
+    oeste, sul, leste, norte = CAIXA_DO_BAIRRO["Tijuca"]
+    assert bairros["Tijuca"] == [sul, oeste, norte, leste]
+    assert set(bairros) == set(CAIXA_DO_BAIRRO)
+
+
+def test_as_fatias_nao_tem_identificador_nem_coordenada(tmp_path):
+    _, saida, _, _ = rodar(tmp_path)
+    conexao = montar_base(LISTA_EXEMPLO)
+    proibidos = set()
+    for id_chamado, porta, latitude, longitude in conexao.sql(
+        "SELECT id_chamado, numero_logradouro, latitude, longitude FROM chamado"
+    ).fetchall():
+        proibidos |= {id_chamado, str(porta)}
+        proibidos |= {repr(v) for v in (latitude, longitude) if v}
+    for arquivo in (saida / "filtros").iterdir():
+        texto = arquivo.read_text(encoding="utf-8")
+        for campo in ("id_chamado", "latitude", "longitude", "numero_logradouro", "subtipo",
+                      "data_fim", "Rua A", "Rua B", "Reparo de lâmpada"):
+            assert campo not in texto, f"{arquivo.name} traz {campo}"
+        for proibido in proibidos:
+            assert not re.search(rf"(?<![\d.]){re.escape(proibido)}(?![\d])", texto), (
+                f"{arquivo.name} traz {proibido}"
+            )
+
+
+def test_coleta_de_novo_apaga_as_fatias_antigas(tmp_path):
+    _, saida, _, _ = rodar(tmp_path)
+    (saida / "filtros" / "2010-01.json").write_text("{}", encoding="utf-8")
+    rodar(tmp_path)
+    assert not (saida / "filtros" / "2010-01.json").exists()
+
+
+# ---- Prazo cruzado com a situação, no resumo (issue #31) ------------------------------
+
+
+def test_resumo_cruza_o_prazo_com_a_situacao(tmp_path):
+    linhas = LISTA_EXEMPLO.splitlines()
+    cabecalho = linhas[0] + ";dentro_prazo;situacao"
+    texto = cabecalho + "\n" + "".join(
+        f"{linha};{'A Vencer' if i % 2 else 'No prazo'};{'Encerrado' if i < 10 else 'Não Encerrado'}\n"
+        for i, linha in enumerate(linhas[1:])
+    )
+    _, saida, _, _ = rodar(tmp_path, texto)
+    resumo = (saida / "resumo.txt").read_text(encoding="utf-8")
+    bloco = resumo.split(
+        "prazo (dentro_prazo) por situação, entre os chamados de problema público:\n"
+    )[1].split("GB lidos")[0]
+    assert bloco.splitlines() == [
+        "  A Vencer / Encerrado: 5",
+        "  A Vencer / Não Encerrado: 4",
+        "  No prazo / Encerrado: 5",
+        "  No prazo / Não Encerrado: 5",
+    ]

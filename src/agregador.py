@@ -8,8 +8,8 @@ da tabela datario.adm_central_atendimento_1746.chamado) e grava, numa pasta:
 - quadrados.geojson: os mesmos quadrados, com o contorno, para o mapa;
 - resumo.txt: quantos chamados foram lidos e quantos ficaram sem rua ou sem coordenada.
 
-Em cada linha: chamados, atendidos, fechados e mediana de dias até fechar. Rua ou
-quadrado com menos chamados que o mínimo sai como "menos de N", sem os números.
+Em cada linha: chamados, atendidos, fechados e mediana de dias até fechar. Toda rua e
+todo quadrado mostra os números, mesmo com 1 chamado (o mínimo saiu na issue #31).
 Nenhum arquivo de saída traz chamado individual, coordenada de chamado,
 identificador ou número de porta: só os totais e o contorno do quadrado.
 
@@ -19,11 +19,12 @@ metros: "687300_7465600" é o quadrado de x 687300 a 687400 e y 7465600 a 746570
 
 Uso, a partir da raiz do repositório:
 
-    .venv/Scripts/python src/agregador.py dados/chamados.csv --saida dados/saida --minimo N
+    .venv/Scripts/python src/agregador.py dados/chamados.csv --saida dados/saida
     (opcional) --inicio 2025-01-01 --fim 2025-12-31   conta só os chamados abertos nesse período
     Para ver as opções: --ajuda
 
-O valor do mínimo fica a definir até a consulta jurídica; por isso não há padrão.
+Os filtros do mapa (issue #31) saem só da coleta, que tem a lista de classificação e as
+colunas de status, prazo e órgão.
 """
 
 import argparse
@@ -108,7 +109,6 @@ class Totais:
 class Resumo:
     """O que aconteceu com os chamados lidos."""
 
-    minimo: int
     inicio: date | None = None
     fim: date | None = None
     lidos: int = 0
@@ -136,7 +136,6 @@ class Resumo:
             f"sem coordenada: {self.sem_coordenada}",
             f"ruas: {self.ruas}",
             f"quadrados: {self.quadrados}",
-            f"mínimo para mostrar o número: {self.minimo}",
         ]) + "\n"
 
 
@@ -205,25 +204,19 @@ def _abrir_lista(arquivo):
 # ---- Agregação ------------------------------------------------------------------------
 
 
-def agregar(entrada, saida, *, minimo, inicio=None, fim=None):
+def agregar(entrada, saida, *, inicio=None, fim=None):
     """Lê a lista de chamados em `entrada` e grava os totais na pasta `saida`.
 
-    `minimo`: rua ou quadrado com menos chamados que isso sai como "menos de N".
     `inicio` e `fim` (datas, opcionais): conta só os chamados abertos nesses dias,
     contando os dois. Devolve o Resumo.
     """
-    if minimo < 1:
-        raise ValueError(
-            "O --minimo precisa ser 1 ou mais. "
-            "O que fazer: informe o mínimo de chamados para mostrar o número, por exemplo --minimo 5."
-        )
     if inicio and fim and fim < inicio:
         raise ValueError(
             "A data final do período (--fim) vem antes da inicial (--inicio). "
             "O que fazer: confira as duas datas; o --fim tem de ser igual ou depois do --inicio."
         )
 
-    resumo = Resumo(minimo=minimo, inicio=inicio, fim=fim)
+    resumo = Resumo(inicio=inicio, fim=fim)
     ruas = defaultdict(Totais)
     quadrados = defaultdict(Totais)
     para_metros = Transformer.from_crs(GRAUS, GRADE_EM_METROS, always_xy=True)
@@ -278,8 +271,8 @@ def agregar(entrada, saida, *, minimo, inicio=None, fim=None):
     resumo.quadrados = len(quadrados)
     saida = Path(saida)
     saida.mkdir(parents=True, exist_ok=True)
-    gravar_ruas(saida / "ruas.csv", ruas, minimo)
-    gravar_quadrados(saida, quadrados, minimo)
+    gravar_ruas(saida / "ruas.csv", ruas)
+    gravar_quadrados(saida, quadrados)
     (saida / "resumo.txt").write_text(resumo.texto(), encoding="utf-8")
     return resumo
 
@@ -287,10 +280,8 @@ def agregar(entrada, saida, *, minimo, inicio=None, fim=None):
 # ---- Gravação -------------------------------------------------------------------------
 
 
-def numeros(totais, minimo):
-    """[chamados, atendidos, fechados, mediana]; abaixo do mínimo, só "menos de N"."""
-    if totais.chamados < minimo:
-        return [f"menos de {minimo}", None, None, None]
+def numeros(totais):
+    """[chamados, atendidos, fechados, mediana]."""
     return [totais.chamados, totais.atendidos, totais.fechados, totais.mediana]
 
 
@@ -306,19 +297,19 @@ def _gravar_csv(caminho, cabecalho, linhas):
             escritor.writerow([_celula(valor) for valor in linha])
 
 
-def gravar_ruas(caminho, ruas, minimo):
+def gravar_ruas(caminho, ruas):
     linhas = (
-        [bairro, rua, *numeros(ruas[(bairro, rua)], minimo)] for bairro, rua in sorted(ruas)
+        [bairro, rua, *numeros(ruas[(bairro, rua)])] for bairro, rua in sorted(ruas)
     )
     _gravar_csv(caminho, CABECALHO_RUAS, linhas)
 
 
-def gravar_quadrados(saida, quadrados, minimo):
+def gravar_quadrados(saida, quadrados):
     para_graus = Transformer.from_crs(GRADE_EM_METROS, GRAUS, always_xy=True)
     linhas = []
     features = []
     for x, y in sorted(quadrados):
-        linha = [f"{x}_{y}", *numeros(quadrados[(x, y)], minimo)]
+        linha = [f"{x}_{y}", *numeros(quadrados[(x, y)])]
         linhas.append(linha)
         lado = LADO_DO_QUADRADO
         # Sudoeste, sudeste, nordeste, noroeste e de volta ao sudoeste (sentido anti-horário).
@@ -358,16 +349,14 @@ FALTA = {
         "por exemplo dados/chamados.csv.",
     ),
     "saida": ("a --saida", "informe a pasta onde gravar os arquivos, por exemplo --saida dados/saida."),
-    "minimo": (
-        "o --minimo",
-        "informe o mínimo de chamados para mostrar o número, por exemplo --minimo 5.",
-    ),
 }
+
+# A opção --minimo saiu na issue #31. Quem ainda a usa recebe esta mensagem, e nada roda.
+MENSAGEM_DO_MINIMO = "A opção --minimo saiu (ver decisoes.md). Rode sem ela."
 
 # Exemplo de valor de cada opção, para as mensagens.
 EXEMPLO = {
     "--saida": "--saida dados/saida",
-    "--minimo": "--minimo 5",
     "--inicio": "--inicio 2025-01-01",
     "--fim": "--fim 2025-12-31",
 }
@@ -412,19 +401,16 @@ def traduzir(mensagem, exemplos=EXEMPLO, veja_a_ajuda=VEJA_A_AJUDA):
     return f"Não entendi a linha de comando. O que fazer: {veja_a_ajuda}"
 
 
-def ler_minimo(texto):
-    try:
-        minimo = int(texto)
-    except ValueError:
-        raise argparse.ArgumentTypeError(
-            f"O --minimo tem de ser um número inteiro, e veio \"{texto}\". "
-            f"O que fazer: {FALTA['minimo'][1]}"
-        ) from None
-    if minimo < 1:
-        raise argparse.ArgumentTypeError(
-            f"O --minimo precisa ser 1 ou mais, e veio {minimo}. O que fazer: {FALTA['minimo'][1]}"
-        )
-    return minimo
+class OpcaoDoMinimoSaiu(argparse.Action):
+    """Para a ferramenta, com a MENSAGEM_DO_MINIMO, se alguém ainda passar o --minimo."""
+
+    def __call__(self, parser, namespace, values, option_string=None):
+        raise ErroNaLinhaDeComando(MENSAGEM_DO_MINIMO)
+
+
+def opcao_do_minimo_que_saiu(grupo):
+    """O --minimo continua conhecido só para dar a mensagem certa; não aparece na ajuda."""
+    grupo.add_argument("--minimo", nargs="?", action=OpcaoDoMinimoSaiu, help=argparse.SUPPRESS)
 
 
 def _leitor_de_data(opcao):
@@ -442,7 +428,7 @@ def _leitor_de_data(opcao):
 def _leitor_de_opcoes():
     leitor = LeitorDeOpcoes(
         prog="agregador.py",
-        usage="%(prog)s ENTRADA --saida PASTA --minimo N [--inicio AAAA-MM-DD] [--fim AAAA-MM-DD]",
+        usage="%(prog)s ENTRADA --saida PASTA [--inicio AAAA-MM-DD] [--fim AAAA-MM-DD]",
         description="Totais dos chamados do 1746 por rua e por quadrado de 100 m.",
         formatter_class=Formatador,
         add_help=False,
@@ -451,10 +437,7 @@ def _leitor_de_opcoes():
     arquivos.add_argument("entrada", nargs="?", metavar="ENTRADA", help="lista de chamados (CSV)")
     arquivos.add_argument("--saida", metavar="PASTA", help="pasta onde gravar os arquivos")
     opcoes = leitor.add_argument_group("opções")
-    opcoes.add_argument(
-        "--minimo", type=ler_minimo, metavar="N",
-        help="rua ou quadrado com menos chamados que N sai como \"menos de N\"",
-    )
+    opcao_do_minimo_que_saiu(opcoes)
     opcoes.add_argument("--inicio", type=_leitor_de_data("--inicio"), metavar="AAAA-MM-DD",
                         help="primeiro dia do período (opcional)")
     opcoes.add_argument("--fim", type=_leitor_de_data("--fim"), metavar="AAAA-MM-DD",
@@ -481,10 +464,7 @@ def main(argv=None):
             print(f"ERRO: {linha}", file=sys.stderr)
         return 2
     try:
-        resumo = agregar(
-            opcoes.entrada, opcoes.saida,
-            minimo=opcoes.minimo, inicio=opcoes.inicio, fim=opcoes.fim,
-        )
+        resumo = agregar(opcoes.entrada, opcoes.saida, inicio=opcoes.inicio, fim=opcoes.fim)
     except FileNotFoundError:
         print(
             f"ERRO: não achei o arquivo {opcoes.entrada}. "

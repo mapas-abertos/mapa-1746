@@ -4,6 +4,10 @@
 >
 > Cada data é um título `## AAAA-MM-DD`. O CI confere a data e a ordem.
 
+## 2026-11-07
+
+- Issue #31: filtros no mapa e fim do mínimo de chamados. O agregador, a coleta e o montador não têm mais o mínimo: todo quadrado e toda rua mostra o número, mesmo com 1 chamado; `--minimo` para com a mensagem "A opção --minimo saiu (ver decisoes.md). Rode sem ela."; dado antigo com "menos de" faz o montador pedir uma coleta nova. A coleta roda 10 consultas e grava a pasta `filtros/` (índice e fatias por mês, por ano e do período todo, só totais por quadrado) e, no resumo, o prazo cruzado com a situação. O mapa ganhou o painel Filtros (período por dia com calendário, tema, status, situação, tipo de situação, prazo e órgão com busca), o botão Limpar filtros e a busca de bairro, que só leva o mapa até lá. Com filtro, o quadrado que fica sem chamados some e a mediana mostra "—". A página de método explica os filtros, diz que as tabelas para baixar ficam sem filtro e traz a nota do prazo. O número da versão aparece no canto do mapa e da página de método (`--versao`, passado pelo `deploy.yml`). Testes novos no agregador, na coleta e no montador (207 no total), com o JavaScript dos filtros rodando no Node.
+
 ## 2026-11-06
 
 - Issue #28: o guia dos chats (`docs/papeis_dos_chats.md` › Revisar e entregar) e o `CLAUDE.md` passaram a mandar o gestor arquivar o sub chat do operador depois do merge, conferindo antes se há trabalho vivo e sem desligar o Remote Control sozinho. Linha 19 do Backlog para a regra subir ao modelo P3.
