@@ -394,9 +394,10 @@ def _rotulo(valor):
 def _caixas(nome, opcoes):
     """As caixas de marcar de um filtro, em ordem alfabética. opcoes: [(valor, rótulo)]."""
     ordem = sorted(opcoes, key=lambda opcao: (opcao[1] == VAZIO, opcao[1].casefold()))
+    # O aria-label repete o nome: o valor de tema, prazo e órgão é só a posição na lista.
     return "\n".join(
-        f'          <label><input type="checkbox" name="{nome}" value="{html.escape(valor)}"> '
-        f"{html.escape(rotulo, quote=False)}</label>"
+        f'          <label><input type="checkbox" name="{nome}" value="{html.escape(valor)}" '
+        f'aria-label="{html.escape(rotulo)}"> {html.escape(rotulo, quote=False)}</label>'
         for valor, rotulo in ordem
     )
 
@@ -781,7 +782,9 @@ a { color: #0b5cad; }
 [hidden] { display: none !important; }
 
 /* Tela do mapa: título e botões em cima, mapa no meio, legenda embaixo. */
-.tela-mapa { display: flex; flex-direction: column; height: 100vh; height: 100dvh; }
+/* Embaixo fica uma faixa livre, da altura da versão (.versao): ela não cobre a legenda. */
+.tela-mapa { display: flex; flex-direction: column; height: 100vh; height: 100dvh; box-sizing: border-box;
+  padding-bottom: 24px; background: #fff; }
 .topo { padding: 8px 12px; background: #fff; border-bottom: 1px solid #d9dee3; }
 .topo h1 { margin: 0; font-size: 1.15rem; }
 .subtitulo { margin: 2px 0 6px; font-size: 0.85rem; color: #52606d; }
@@ -790,7 +793,7 @@ a { color: #0b5cad; }
   font-size: 0.9rem; text-decoration: none; }
 .botao.secundario { background: #fff; color: #0b5cad; border: 1px solid #0b5cad; }
 #mapa { flex: 1 1 auto; min-height: 200px; width: 100%; }
-.legenda { padding: 8px 12px 26px; background: #fff; border-top: 1px solid #d9dee3; font-size: 0.8rem; max-height: 42vh; overflow-y: auto; }
+.legenda { padding: 8px 12px; background: #fff; border-top: 1px solid #d9dee3; font-size: 0.8rem; max-height: 42vh; overflow-y: auto; }
 .legenda h2 { margin: 0 0 4px; font-size: 0.9rem; }
 .legenda ul { list-style: none; margin: 0 0 6px; padding: 0; display: flex; flex-wrap: wrap; gap: 2px 14px; }
 .legenda li { display: flex; align-items: center; gap: 6px; }
@@ -824,7 +827,8 @@ a { color: #0b5cad; }
 .nota { margin: 6px 0 0; font-size: 0.8rem; color: #52606d; }
 
 /* Versão publicada, num canto fixo da tela. */
-.versao { position: fixed; left: 0; bottom: 0; margin: 0; padding: 2px 8px; font-size: 0.75rem; color: #52606d;
+.versao { position: fixed; left: 0; bottom: 0; margin: 0; padding: 2px 8px; font-size: 0.75rem; line-height: 20px;
+  color: #52606d;
   background: rgba(255, 255, 255, 0.92); border-top-right-radius: 6px; z-index: 1000; }
 
 /* Página de método. */

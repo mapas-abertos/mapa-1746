@@ -683,6 +683,22 @@ def test_o_mapa_e_o_metodo_mostram_a_versao_publicada(tmp_path):
     assert "position: fixed" in regra  # num canto fixo da tela
 
 
+def _pixels(regra, propriedade):
+    return [int(n) for n in re.findall(r"(\d+)px", re.search(propriedade + r": ([^;]+);", regra).group(1))]
+
+
+def test_a_versao_nao_cobre_a_legenda(tmp_path):
+    # A tela do mapa guarda embaixo uma faixa da altura da versão: a legenda acaba acima dela.
+    _, site = montar(tmp_path, versao="v2026.11.06")
+    css = texto(site, "estilo.css")
+    versao = re.search(r"\.versao \{([^}]*)\}", css).group(1)
+    tela = re.search(r"\.tela-mapa \{([^}]*)\}", css).group(1)
+    vertical = _pixels(versao, "padding")[0]
+    altura_da_versao = _pixels(versao, "line-height")[0] + 2 * vertical
+    assert "box-sizing: border-box" in tela
+    assert _pixels(tela, "padding-bottom")[0] >= altura_da_versao
+
+
 def test_sem_versao_aparece_versao_local_e_o_montador_nao_para(tmp_path):
     _, site = montar(tmp_path)
     for nome in ("index.html", "metodo.html"):
@@ -929,6 +945,22 @@ def test_a_lista_de_tema_nao_mostra_tipo_de_fora_do_grupo_publico(tmp_path):
     for tipo in ("Estacionamento Irregular", "Remoção Gratuita", "Tipo Em Revisão",
                  "Tipo Sem Lista"):
         assert tipo not in tudo, tipo
+
+
+def test_cada_caixa_de_marcar_tem_o_nome_do_valor_para_o_leitor_de_tela(tmp_path):
+    # Tema, prazo e órgão guardam um número (a posição na lista); o leitor de tela lê o nome.
+    _, site = coletado(tmp_path)
+    caixas = re.findall(r'<label><input type="checkbox" ([^>]*)> ([^<]*)</label>',
+                        texto(site, "index.html"))
+    assert caixas
+    nomes = {}
+    for atributos, rotulo in caixas:
+        nome = re.search(r'aria-label="([^"]*)"', atributos)
+        assert nome, atributos
+        assert nome.group(1) == rotulo, atributos
+        nomes.setdefault(re.search(r'name="([^"]*)"', atributos).group(1), []).append(rotulo)
+    assert "Iluminação Pública" in nomes["tema"]
+    assert "Órgão da Luz" in nomes["orgao"]
 
 
 def test_na_busca_de_orgao_parte_do_nome_encolhe_a_lista(tmp_path):
