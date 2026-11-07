@@ -55,6 +55,7 @@ A ordem da lista é a prioridade: o de cima é o próximo. O gestor mantém.
 
 - [x] Agregador: totais por rua e por quadrado de 100 m — issue #7, PR #8 (05/11/2026). O valor do mínimo fica a definir até a consulta jurídica — _resp.: Guilherme_
 - [x] Mapa v1: quadrados coloridos, tabelas para baixar e página de método — issue #16, PR #19 (05/11/2026). Publicado no GitHub Pages pela issue #22 — _resp.: Guilherme_
+- [ ] Filtros no mapa (período por dia, tema, status, situação, tipo de situação, prazo, órgão, bairro) e fim do mínimo de 5 chamados — issue #31 — _resp.: Guilherme_
 - [x] Regra de escopo (responder só o que foi pedido) no `CLAUDE.md` e na skill `abrir-pedido` — issue #32, falta o gestor abrir a mesma regra no modelo P3 depois do merge — _resp.: Guilherme_
 - [ ] Mapa só com chamados de problema público, por privacidade — issue #26; código e testes no pull request, falta a revisão do gestor, o teste manual (rodar a coleta de novo com o login do Guilherme) e republicar o site — _resp.: Guilherme_
 - [ ] Coleta: somar no BigQuery todos os chamados por rua e quadrado — issue #15; código e testes no pull request, falta a revisão do gestor e o teste manual com o login do Guilherme. Rodar pelo Actions fica para outra issue — _resp.: Guilherme_
