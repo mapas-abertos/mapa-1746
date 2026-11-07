@@ -4,6 +4,10 @@
 >
 > Cada data é um título `## AAAA-MM-DD`. O CI confere a data e a ordem.
 
+## 2026-11-07
+
+- Issue #32: regra de escopo no `CLAUDE.md` (Regras) e no passo 1 da skill `abrir-pedido`: responder só o que foi pedido, a partir dos dados e das colunas que já existem; sugestão fora do escopo vai numa pergunta separada, marcada "fora do pedido". Veio de um pedido de filtros em que sugestões de colorir o mapa se misturaram às opções.
+
 ## 2026-11-06
 
 - Issue #28: o guia dos chats (`docs/papeis_dos_chats.md` › Revisar e entregar) e o `CLAUDE.md` passaram a mandar o gestor arquivar o sub chat do operador depois do merge, conferindo antes se há trabalho vivo e sem desligar o Remote Control sozinho. Linha 19 do Backlog para a regra subir ao modelo P3.
