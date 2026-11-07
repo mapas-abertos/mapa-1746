@@ -4,6 +4,10 @@
 >
 > Cada data é um título `## AAAA-MM-DD`. O CI confere a data e a ordem.
 
+## 2026-11-07
+
+- Abertas a issue #31 (filtros no mapa, período por dia e fim do mínimo de 5 chamados) e a issue #32 (regra de escopo nas respostas), pela skill `abrir-pedido`. As duas entraram no topo da fila do checklist.
+
 ## 2026-11-06
 
 - Issue #28: o guia dos chats (`docs/papeis_dos_chats.md` › Revisar e entregar) e o `CLAUDE.md` passaram a mandar o gestor arquivar o sub chat do operador depois do merge, conferindo antes se há trabalho vivo e sem desligar o Remote Control sozinho. Linha 19 do Backlog para a regra subir ao modelo P3.
