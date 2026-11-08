@@ -4,6 +4,10 @@
 >
 > Cada data é um título `## AAAA-MM-DD`. O CI confere a data e a ordem.
 
+## 2026-11-08
+
+- Issue #31 juntada à `main` (PR #35), depois da revisão do `revisor`, do teste do gestor no site montado com a coleta real e do teste manual do responsável. O sub chat da #31 foi arquivado. Checklist em dia: #31, #26 e #15 marcadas, e a linha da #32 com o número da issue no modelo P3.
+
 ## 2026-11-07
 
 - Issue #31: filtros no mapa e fim do mínimo de chamados. O agregador, a coleta e o montador não têm mais o mínimo: todo quadrado e toda rua mostra o número, mesmo com 1 chamado; `--minimo` para com a mensagem "A opção --minimo saiu (ver decisoes.md). Rode sem ela."; dado antigo com "menos de" faz o montador pedir uma coleta nova. A coleta roda 10 consultas e grava a pasta `filtros/` (índice e fatias por mês, por ano e do período todo, só totais por quadrado) e, no resumo, o prazo cruzado com a situação. O mapa ganhou o painel Filtros (período por dia com calendário, tema, status, situação, tipo de situação, prazo e órgão com busca), o botão Limpar filtros e a busca de bairro, que só leva o mapa até lá. Com filtro, o quadrado que fica sem chamados some e a mediana mostra "—". A página de método explica os filtros, diz que as tabelas para baixar ficam sem filtro e traz a nota do prazo. O número da versão aparece no canto do mapa e da página de método (`--versao`, passado pelo `deploy.yml`). Testes novos no agregador, na coleta e no montador (207 no total), com o JavaScript dos filtros rodando no Node. Depois do teste do gestor no site real (coleta de 07/11: 6.320.396 chamados de problema público, 41.660 quadrados, pasta `filtros` com 111 MB em 217 arquivos, `dados.js` com 15,2 MB): a versão deixou de cobrir a legenda, e as caixas de tema, prazo e órgão passaram a ter o nome para o leitor de tela (antes, o número da lista). O período de um mês funciona; na vista da cidade inteira os quadrados de 1 a 9 chamados ficam pequenos demais para ver.

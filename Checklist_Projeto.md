@@ -2,7 +2,7 @@
 
 Fonte de verdade do andamento. Marque `[x]` ao resolver e anote decisão e responsável na linha.
 
-**Última atualização:** 2026-11-07
+**Última atualização:** 2026-11-08
 
 ## Dados-chave
 
@@ -55,7 +55,7 @@ A ordem da lista é a prioridade: o de cima é o próximo. O gestor mantém.
 
 - [x] Agregador: totais por rua e por quadrado de 100 m — issue #7, PR #8 (05/11/2026). O mínimo de chamados saiu em 07/11/2026 (issue #31, ver `decisoes.md`) — _resp.: Guilherme_
 - [x] Mapa v1: quadrados coloridos, tabelas para baixar e página de método — issue #16, PR #19 (05/11/2026). Publicado no GitHub Pages pela issue #22 — _resp.: Guilherme_
-- [ ] Filtros no mapa (período por dia, tema, status, situação, tipo de situação, prazo, órgão e busca de bairro), sem o mínimo de chamados e com o número da versão na tela — issue #31; código e testes no pull request, falta a revisão do gestor, o teste manual (rodar a coleta de novo com o login do Guilherme, medir o tamanho da pasta `filtros/` e pôr a pasta no `coleta.zip`) e republicar o site — _resp.: Guilherme_
-- [x] Regra de escopo (responder só o que foi pedido) no `CLAUDE.md` e na skill `abrir-pedido` — issue #32, falta o gestor abrir a mesma regra no modelo P3 depois do merge — _resp.: Guilherme_
-- [ ] Mapa só com chamados de problema público, por privacidade — issue #26; código e testes no pull request, falta a revisão do gestor, o teste manual (rodar a coleta de novo com o login do Guilherme) e republicar o site — _resp.: Guilherme_
-- [ ] Coleta: somar no BigQuery todos os chamados por rua e quadrado — issue #15; código e testes no pull request, falta a revisão do gestor e o teste manual com o login do Guilherme. Rodar pelo Actions fica para outra issue — _resp.: Guilherme_
+- [x] Filtros no mapa (período por dia, tema, status, situação, tipo de situação, prazo, órgão e busca de bairro), sem o mínimo de chamados e com o número da versão na tela — issue #31, PR #35 (08/11/2026). Na próxima publicação: pôr a pasta `filtros/` no `coleta.zip` e ver o número da versão no site — _resp.: Guilherme_
+- [x] Regra de escopo (responder só o que foi pedido) no `CLAUDE.md` e na skill `abrir-pedido` — issue #32, PR #34 (07/11/2026); no modelo P3: guilobocarvalho/mentoria-p3-modelo#23 — _resp.: Guilherme_
+- [x] Mapa só com chamados de problema público, por privacidade — issue #26 (fechada). Republicar o site fica para a próxima publicação — _resp.: Guilherme_
+- [x] Coleta: somar no BigQuery todos os chamados por rua e quadrado — issue #15 (fechada). Rodar pelo Actions fica para outra issue — _resp.: Guilherme_
