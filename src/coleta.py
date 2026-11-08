@@ -8,7 +8,9 @@ computador. Grava, numa pasta, os mesmos arquivos do agregador (issue #7):
 - ruas.csv: totais por bairro e rua;
 - quadrados.csv e quadrados.geojson: totais por quadrado de 100 m x 100 m;
 - ruas.geojson: o desenho de cada rua (do cadastro de logradouros), com os totais;
-- resumo.txt: chamados lidos, sem rua, sem coordenada (inclusive fora do município) e as datas.
+- resumo.txt: chamados lidos, sem rua, sem coordenada (inclusive fora do município), as datas
+  e o cruzamento do prazo (dentro_prazo) com a situação;
+- filtros/: as fatias dos filtros do mapa (issue #31), ver abaixo.
 
 Só problema público (issue #26, por privacidade): cada par tipo/subtipo do 1746 está num
 grupo da lista de classificação (`_referencias/20261106_classificacao_subtipos/`). Só os
@@ -24,9 +26,21 @@ linha própria no resumo. Na rua, ele continua contando. Sem rua, sem coordenada
 município contam só entre os chamados de problema público.
 
 As regras são as do agregador: total, atendidos, fechados e mediana exata de dias até
-fechar; rua ou quadrado com menos chamados que o mínimo sai como "menos de N". A conta
+fechar, para toda rua e todo quadrado, mesmo com 1 chamado (o mínimo saiu na issue #31). A conta
 de latitude e longitude para metros (SIRGAS 2000 / UTM 23S, EPSG:31983) é escrita na
 própria consulta e conferida, nos testes, contra o pyproj, que o agregador usa.
+
+Filtros do mapa (issue #31): a pasta filtros/ tem o que o site soma quando um filtro está
+ligado. Cada linha é um total: neste quadrado de 100 m, neste dia (ou mês, ou ano), deste
+tema, com este status, situação, tipo de situação, prazo e órgão, houve N chamados, dos quais
+F fechados. Nenhuma linha tem número de chamado, coordenada, rua, subtipo, hora, data de
+fechamento ou dias até fechar. São três tipos de fatia, para o site baixar só o que precisa:
+- AAAA-MM.json: um mês, com o dia de abertura (data_inicio);
+- AAAA.json: um ano, sem o dia;
+- tudo.json: todos os anos, sem data.
+O indice.json tem as listas (quadrados, temas, estados, prazos, órgãos), os meses e anos, o
+primeiro e o último dia com chamados e a caixa de cada bairro (do cadastro de bairros), e
+cada fatia guarda só a posição nessas listas, em colunas (FORMATO_DAS_FATIAS).
 
 Antes de rodar, a coleta faz uma simulação (dry run), mostra quantos GB vai ler e para
 se passar do limite. O login é o Google do responsável, pelo navegador: nenhuma senha
@@ -34,7 +48,7 @@ nem chave fica no código ou em arquivo do projeto.
 
 Uso, a partir da raiz do repositório:
 
-    .venv/Scripts/python src/coleta.py --projeto ID_DO_PROJETO --minimo N
+    .venv/Scripts/python src/coleta.py --projeto ID_DO_PROJETO
     (opcional) --saida dados/coleta   pasta dos arquivos (padrão: dados/coleta)
     (opcional) --limite-gb 10         para antes de rodar se a consulta for ler mais que isso
                                       (no PowerShell, com ponto: 0.5; 0,001 chega como 0,1)
@@ -42,7 +56,6 @@ Uso, a partir da raiz do repositório:
     Para ver as opções: --ajuda
 
 O --projeto é o projeto do Google Cloud que roda a consulta (o do sandbox gratuito).
-O valor do mínimo fica a definir até a consulta jurídica; por isso não há padrão.
 """
 
 import argparse
@@ -51,6 +64,7 @@ import io
 import json
 import math
 import sys
+from array import array
 from collections.abc import Callable
 from dataclasses import dataclass, field
 from datetime import date, datetime
@@ -66,7 +80,6 @@ from agregador import (
     CABECALHO_RUAS,
     CASAS_DA_MEDIANA,
     CASAS_DO_GEOJSON,
-    FALTA as FALTA_NO_AGREGADOR,
     LADO_DO_QUADRADO,
     SITUACAO_ATENDIDO,
     ErroNaLinhaDeComando,
@@ -74,8 +87,8 @@ from agregador import (
     LeitorDeOpcoes,
     gravar_quadrados,
     gravar_ruas,
-    ler_minimo,
     numeros,
+    opcao_do_minimo_que_saiu,
 )
 
 # ---- Regras da coleta (mudou uma? registre em decisoes.md) ----------------------------
@@ -109,6 +122,27 @@ GRUPO_DO_MAPA = "publico"
 GRUPOS_FORA_DO_MAPA = ["denuncia", "pessoal", "sem_lugar", "a_revisar"]
 GRUPOS = [GRUPO_DO_MAPA, *GRUPOS_FORA_DO_MAPA]
 SEM_CLASSIFICACAO = "sem classificação"  # par que não está na lista
+
+# Filtros do mapa (issue #31): as colunas da tabela que viram filtro, com o nome que têm
+# nas consultas e nas fatias. O tema é o `tipo`, só dos chamados do grupo publico.
+COLUNAS_DOS_FILTROS = {
+    "tema": "tipo",
+    "status": "status",
+    "situacao": "situacao",
+    "tipo_situacao": "tipo_situacao",
+    "prazo": "dentro_prazo",
+    "orgao": "nome_unidade_organizacional",
+}
+DIMENSOES = list(COLUNAS_DOS_FILTROS)
+PASTA_DOS_FILTROS = "filtros"
+EXTENSAO_DAS_FATIAS = ".json"  # o único nome de arquivo .json da coleta: as fatias e o índice
+
+# Colunas de cada fatia, nesta ordem. "q" é a posição do quadrado na lista do índice, escrita
+# como diferença para a linha anterior (a fatia vem em ordem de quadrado); "d" é o dia do
+# mês (só nas fatias de mês); "t", "e", "p" e "o" são as posições do tema, do estado (status,
+# situação e tipo de situação juntos), do prazo e do órgão nas listas do índice; "n" são os
+# chamados e "f", os fechados.
+FORMATO_DAS_FATIAS = ["q", "d", "t", "e", "p", "o", "n", "f"]
 
 # Permissão pedida no login Google: rodar consultas no BigQuery.
 ESCOPOS = ["https://www.googleapis.com/auth/bigquery"]
@@ -180,6 +214,7 @@ class Dialeto:
     dentro: str  # se o ponto {lon}, {lat} está no {contorno} do município, com a {tolerancia}
     texto: Callable[[str], str]  # um texto escrito na consulta, entre apóstrofos
     pares: str  # tabela de pares (tipo, subtipo) escrita na consulta, com as {linhas}
+    caixa: str  # a caixa (xmin, ymin, xmax, ymax) dos desenhos de {coluna} juntos
 
 
 def _texto_no_bigquery(valor):
@@ -198,6 +233,7 @@ BIGQUERY = Dialeto(
     dentro="ST_DWITHIN(SAFE.ST_GEOGPOINT({lon}, {lat}), {contorno}, {tolerancia})",
     texto=_texto_no_bigquery,
     pares="UNNEST(ARRAY<STRUCT<tipo STRING, subtipo STRING>>[{linhas}])",
+    caixa="ST_BOUNDINGBOX(ST_UNION_AGG({coluna}))",
 )
 
 # Colunas que cada consulta devolve. Qualquer outra faz a coleta parar.
@@ -205,13 +241,22 @@ COLUNAS_DO_RESUMO = ["lidos", "problema_publico", "sem_rua", "rua_fora_do_cadast
                      "sem_coordenada", "coordenada_fora_do_municipio", "mais_recente"]
 COLUNAS_DO_DESENHO = ["bairro", "rua", "desenho"]
 COLUNAS_POR_SUBTIPO = ["tipo", "subtipo", "chamados"]
+COLUNAS_DO_PRAZO = ["prazo", "situacao", "chamados"]
+COLUNAS_DAS_CAIXAS = ["bairro", "oeste", "sul", "leste", "norte"]
 COLUNAS = {
     "ruas": CABECALHO_RUAS,
     "quadrados": CABECALHO_QUADRADOS,
     "resumo": COLUNAS_DO_RESUMO,
     "desenho_das_ruas": COLUNAS_DO_DESENHO,
     "por_subtipo": COLUNAS_POR_SUBTIPO,
+    "prazo_por_situacao": COLUNAS_DO_PRAZO,
+    "caixas_dos_bairros": COLUNAS_DAS_CAIXAS,
+    "filtros_por_dia": ["quadrado", "dia", *DIMENSOES, "chamados", "fechados"],
+    "filtros_por_ano": ["quadrado", "ano", *DIMENSOES, "chamados", "fechados"],
+    "filtros_tudo": ["quadrado", *DIMENSOES, "chamados", "fechados"],
 }
+# As três consultas dos filtros têm quase uma linha por chamado: são lidas aos poucos.
+CONSULTAS_DOS_FILTROS = ["filtros_por_dia", "filtros_por_ano", "filtros_tudo"]
 
 
 class LimiteExcedido(ValueError):
@@ -296,11 +341,11 @@ def _sem_espacos(coluna):
 
 
 def montar_consultas(dialeto, classificacao):
-    """As cinco consultas da coleta, em SQL: ruas, quadrados, resumo, desenho_das_ruas e
-    por_subtipo.
+    """As consultas da coleta, em SQL, com os nomes de COLUNAS.
 
     Todas devolvem só linhas somadas. A tabela de chamados é lida em todas, menos no
-    desenho das ruas, que vem só do cadastro de logradouros. Os pares do grupo publico da
+    desenho das ruas e nas caixas dos bairros, que vêm só dos cadastros. Os pares do grupo
+    publico da
     `classificacao` vão escritos na consulta: o filtro roda dentro do BigQuery.
     """
     tabela = dialeto.tabela
@@ -324,6 +369,11 @@ def montar_consultas(dialeto, classificacao):
     COUNT(dias) AS fechados,
     MAX(mediana) AS mediana_dias_ate_fechar
   FROM (SELECT {grupo}, atendido, dias, {mediana(grupo)} AS mediana FROM"""
+
+    dimensoes = ", ".join(DIMENSOES)
+    filtros_lidos = ",\n".join(
+        f"    {_sem_espacos('c.' + coluna)} AS {nome}" for nome, coluna in COLUNAS_DOS_FILTROS.items()
+    )
 
     bairros = f"""bairros AS (
   SELECT CAST(id_bairro AS STRING) AS id_bairro, MIN(TRIM(nome)) AS bairro
@@ -349,6 +399,7 @@ chamados_lidos AS (
   SELECT
     p.tipo IS NOT NULL AS e_publico,
     c.data_inicio,
+{filtros_lidos},
     COALESCE(TRIM(c.tipo_situacao) = '{SITUACAO_ATENDIDO}', FALSE) AS atendido,
     {dias} AS dias,
     COALESCE(b.bairro, '') AS bairro,
@@ -374,7 +425,7 @@ no_municipio AS (
 ),
 chamados AS (
   SELECT
-    e_publico, data_inicio, atendido, dias, bairro, logradouro_valido, rua,
+    e_publico, data_inicio, {dimensoes}, atendido, dias, bairro, logradouro_valido, rua,
     latitude IS NOT NULL AND longitude IS NOT NULL AND NOT dentro_do_municipio
       AS fora_do_municipio,
     CASE WHEN dentro_do_municipio THEN latitude END AS latitude,
@@ -397,17 +448,55 @@ GROUP BY bairro, rua"""
     def canto(eixo):
         return f"CAST(CAST(FLOOR({eixo} / {lado}) * {lado} AS {dialeto.inteiro}) AS STRING)"
 
-    quadrados = f"""{chamados},
+    # Um chamado com coordenada por linha, já no quadrado. Nada daqui sai do BigQuery.
+    no_quadrado = f"""{chamados},
 com_coordenada AS (
-  SELECT atendido, dias, latitude, longitude FROM chamados
+  SELECT atendido, dias, latitude, longitude, data_inicio, {dimensoes} FROM chamados
   WHERE e_publico AND latitude IS NOT NULL AND longitude IS NOT NULL
 ),
 {passos},
 no_quadrado AS (
-  SELECT atendido, dias, CONCAT({canto("x")}, '_', {canto("y")}) AS quadrado FROM {anterior}
-)
+  SELECT atendido, dias, CAST(data_inicio AS DATE) AS dia, {dimensoes},
+    CONCAT({canto("x")}, '_', {canto("y")}) AS quadrado
+  FROM {anterior}
+)"""
+
+    quadrados = f"""{no_quadrado}
 SELECT quadrado,{totais("quadrado")} no_quadrado) AS por_quadrado
 GROUP BY quadrado"""
+
+    def filtros(*tempo):
+        # Em ordem de tempo primeiro: a coleta grava uma fatia por vez, sem guardar as outras.
+        nomes_do_tempo = [t.split(" AS ")[-1] for t in tempo]
+        colunas = ", ".join(["quadrado", *tempo, dimensoes])
+        nomes = ", ".join(["quadrado", *nomes_do_tempo, dimensoes])
+        ordem = ", ".join([*nomes_do_tempo, "quadrado", dimensoes])
+        return f"""{no_quadrado}
+SELECT {colunas}, COUNT(*) AS chamados, COUNT(dias) AS fechados
+FROM no_quadrado
+GROUP BY {nomes}
+ORDER BY {ordem}"""
+
+    filtros_por_dia = filtros("dia")
+    filtros_por_ano = filtros("EXTRACT(YEAR FROM dia) AS ano")
+    filtros_tudo = filtros()
+
+    # Quantos chamados de problema público em cada par prazo/situação, na cidade toda.
+    prazo_por_situacao = f"""{chamados}
+SELECT prazo, situacao, COUNT(*) AS chamados
+FROM chamados
+WHERE e_publico
+GROUP BY prazo, situacao"""
+
+    # A caixa de cada bairro, do cadastro de bairros, para a busca de bairro do site.
+    caixas = f"""SELECT b.bairro, b.caixa.xmin AS oeste, b.caixa.ymin AS sul,
+  b.caixa.xmax AS leste, b.caixa.ymax AS norte
+FROM (
+  SELECT TRIM(nome) AS bairro, {dialeto.caixa.format(coluna="geometry")} AS caixa
+  FROM {tabela(TABELA_BAIRROS)}
+  WHERE geometry IS NOT NULL AND TRIM(nome) != ''
+  GROUP BY 1
+) AS b"""
 
     # Sem rua, sem coordenada e fora do município: só entre os chamados de problema público.
     resumo = f"""{chamados}
@@ -445,7 +534,9 @@ WHERE l.geometry IS NOT NULL AND TRIM(l.nome_completo) != ''
 GROUP BY 1, 2"""
 
     return {"ruas": ruas, "quadrados": quadrados, "resumo": resumo, "desenho_das_ruas": desenho,
-            "por_subtipo": por_subtipo}
+            "por_subtipo": por_subtipo, "prazo_por_situacao": prazo_por_situacao,
+            "caixas_dos_bairros": caixas, "filtros_por_dia": filtros_por_dia,
+            "filtros_por_ano": filtros_por_ano, "filtros_tudo": filtros_tudo}
 
 
 # ---- Coleta ---------------------------------------------------------------------------
@@ -475,7 +566,6 @@ class Soma:
 class Resumo:
     """O que a coleta leu."""
 
-    minimo: int
     gb_lidos: float = 0.0
     lidos: int = 0
     problema_publico: int = 0  # os que entram no mapa
@@ -490,6 +580,7 @@ class Resumo:
     ruas: int = 0
     ruas_com_desenho: int = 0
     quadrados: int = 0
+    prazo_por_situacao: list = field(default_factory=list)  # (prazo, situação, chamados)
 
     def texto(self):
         return "\n".join([
@@ -514,9 +605,16 @@ class Resumo:
             f"ruas: {self.ruas}",
             f"ruas com desenho: {self.ruas_com_desenho}",
             f"quadrados: {self.quadrados}",
-            f"mínimo para mostrar o número: {self.minimo}",
+            CABECALHO_DO_PRAZO,
+            *(f"  {prazo or VAZIO} / {situacao or VAZIO}: {chamados}"
+              for prazo, situacao, chamados in self.prazo_por_situacao),
             f"GB lidos no BigQuery (simulação): {_gb(self.gb_lidos)}",
         ]) + "\n"
+
+
+# O cruzamento do prazo com a situação, no resumo (issue #31). O montador do site lê este bloco.
+CABECALHO_DO_PRAZO = "prazo (dentro_prazo) por situação, entre os chamados de problema público:"
+VAZIO = "(vazio)"
 
 
 def _gb(valor):
@@ -567,7 +665,7 @@ def _contar_por_grupo(resumo, linhas, classificacao):
     resumo.sem_classificacao = sorted(sem_classificacao, key=lambda par: (-par[2], par[0], par[1]))
 
 
-def coletar(cliente, saida, *, minimo, classificacao, limite_gb=LIMITE_GB_PADRAO,
+def coletar(cliente, saida, *, classificacao, limite_gb=LIMITE_GB_PADRAO,
             dialeto=BIGQUERY, hoje=None, avisar=print):
     """Roda as consultas no BigQuery (`cliente`) e grava os totais na pasta `saida`.
 
@@ -576,11 +674,6 @@ def coletar(cliente, saida, *, minimo, classificacao, limite_gb=LIMITE_GB_PADRAO
     consultas e para, sem rodar nenhuma, se juntas forem ler mais que `limite_gb`.
     Devolve o Resumo.
     """
-    if minimo < 1:
-        raise ValueError(
-            "O --minimo precisa ser 1 ou mais. "
-            "O que fazer: informe o mínimo de chamados para mostrar o número, por exemplo --minimo 5."
-        )
     if limite_gb <= 0:
         raise ValueError(
             "O --limite-gb precisa ser maior que zero. "
@@ -594,7 +687,7 @@ def coletar(cliente, saida, *, minimo, classificacao, limite_gb=LIMITE_GB_PADRAO
         cliente.query(sql, job_config=simulacao).total_bytes_processed or 0
         for sql in consultas.values()
     )
-    resumo = Resumo(minimo=minimo, gb_lidos=total / GB, data_da_coleta=hoje or date.today())
+    resumo = Resumo(gb_lidos=total / GB, data_da_coleta=hoje or date.today())
     avisar(
         f"Simulação: a coleta vai ler {_gb(resumo.gb_lidos)} GB no BigQuery "
         f"(limite: {_gb(limite_gb)} GB)."
@@ -607,6 +700,7 @@ def coletar(cliente, saida, *, minimo, classificacao, limite_gb=LIMITE_GB_PADRAO
             f"{math.ceil(resumo.gb_lidos)}."
         )
 
+    # Primeiro roda todas e confere as colunas: se uma estiver errada, nada é gravado.
     resultados = {}
     for nome, sql in consultas.items():
         avisar(f"Rodando a consulta {nome}...")
@@ -619,7 +713,10 @@ def coletar(cliente, saida, *, minimo, classificacao, limite_gb=LIMITE_GB_PADRAO
                 f"{', '.join(COLUNAS[nome])}. Nada foi gravado. O que fazer: confira a "
                 f"consulta em src/coleta.py; nenhuma coluna do chamado pode sair do BigQuery."
             )
-        resultados[nome] = [dict(linha.items()) for linha in resultado]
+        resultados[nome] = resultado
+    for nome in consultas:
+        if nome not in CONSULTAS_DOS_FILTROS:
+            resultados[nome] = [dict(linha.items()) for linha in resultados[nome]]
 
     ruas = {(linha["bairro"], linha["rua"]): Soma.da_linha(linha) for linha in resultados["ruas"]}
     quadrados = {}
@@ -639,13 +736,17 @@ def coletar(cliente, saida, *, minimo, classificacao, limite_gb=LIMITE_GB_PADRAO
     resumo.mais_recente = _como_data(linha["mais_recente"])
     resumo.ruas = len(ruas)
     resumo.quadrados = len(quadrados)
+    resumo.prazo_por_situacao = sorted(
+        (linha["prazo"], linha["situacao"], int(linha["chamados"]))
+        for linha in resultados["prazo_por_situacao"]
+    )
 
     saida = Path(saida)
     saida.mkdir(parents=True, exist_ok=True)
-    gravar_ruas(saida / "ruas.csv", ruas, minimo)
-    gravar_quadrados(saida, quadrados, minimo)
-    resumo.ruas_com_desenho = gravar_desenho_das_ruas(saida / "ruas.geojson", ruas, desenhos,
-                                                      minimo)
+    gravar_ruas(saida / "ruas.csv", ruas)
+    gravar_quadrados(saida, quadrados)
+    resumo.ruas_com_desenho = gravar_desenho_das_ruas(saida / "ruas.geojson", ruas, desenhos)
+    gravar_filtros(saida / PASTA_DOS_FILTROS, sorted(quadrados), resultados, avisar)
     (saida / "resumo.txt").write_text(resumo.texto(), encoding="utf-8")
     return resumo
 
@@ -660,7 +761,7 @@ def _arredondar(valor):
     return valor
 
 
-def gravar_desenho_das_ruas(caminho, ruas, desenhos, minimo):
+def gravar_desenho_das_ruas(caminho, ruas, desenhos):
     """Grava ruas.geojson: cada rua com desenho no cadastro, com os totais. Devolve quantas."""
     features = []
     for bairro, rua in sorted(ruas):
@@ -669,13 +770,135 @@ def gravar_desenho_das_ruas(caminho, ruas, desenhos, minimo):
             continue
         features.append({
             "type": "Feature",
-            "properties": dict(zip(CABECALHO_RUAS, [bairro, rua, *numeros(ruas[(bairro, rua)], minimo)])),
+            "properties": dict(zip(CABECALHO_RUAS, [bairro, rua, *numeros(ruas[(bairro, rua)])])),
             "geometry": _arredondar(json.loads(desenho)),
         })
     geojson = {"type": "FeatureCollection", "features": features}
     caminho.write_text(json.dumps(geojson, ensure_ascii=False, separators=(",", ":")),
                        encoding="utf-8")
     return len(features)
+
+
+# ---- Filtros do mapa (issue #31) ------------------------------------------------------
+
+
+class Lista:
+    """Uma lista de valores (temas, estados, prazos, órgãos): cada valor novo ganha a próxima posição."""
+
+    def __init__(self):
+        self.posicao = {}
+
+    def __call__(self, valor):
+        return self.posicao.setdefault(valor, len(self.posicao))
+
+    def valores(self):
+        return list(self.posicao)
+
+
+class Fatia:
+    """As linhas de uma fatia, em colunas de números inteiros."""
+
+    def __init__(self, com_dia):
+        self.colunas = {nome: array("l") for nome in FORMATO_DAS_FATIAS if com_dia or nome != "d"}
+
+    def somar(self, valores):
+        for nome, valor in valores.items():
+            self.colunas[nome].append(valor)
+
+    def __len__(self):
+        return len(self.colunas["q"])
+
+    def gravar(self, caminho):
+        """Grava em ordem de quadrado, com o "q" escrito como diferença para a linha anterior."""
+        # A ordenação é estável: no mesmo quadrado, fica a ordem da consulta.
+        ordem = sorted(range(len(self)), key=self.colunas["q"].__getitem__)
+        partes = []
+        for nome, coluna in self.colunas.items():
+            valores = [coluna[i] for i in ordem]
+            if nome == "q":
+                valores = [valor - anterior for valor, anterior in zip(valores, [0, *valores])]
+            partes.append(f'"{nome}":[{",".join(map(str, valores))}]')
+        caminho.write_text("{" + ",".join(partes) + "}", encoding="utf-8")
+
+
+def gravar_filtros(pasta, quadrados, resultados, avisar=print):
+    """Grava as fatias dos filtros e o indice.json na `pasta`. Ver o começo deste arquivo."""
+    pasta.mkdir(parents=True, exist_ok=True)
+    for antigo in pasta.glob(f"*{EXTENSAO_DAS_FATIAS}"):  # de uma coleta anterior
+        antigo.unlink()
+    posicao_do_quadrado = {f"{x}_{y}": i for i, (x, y) in enumerate(quadrados)}
+    temas, estados, prazos, orgaos = Lista(), Lista(), Lista(), Lista()
+
+    def valores(linha):
+        quadrado = posicao_do_quadrado.get(linha["quadrado"])
+        if quadrado is None:
+            raise ValueError(
+                "Uma fatia dos filtros tem um quadrado que não está em quadrados.csv. Nada do "
+                "site muda. O que fazer: rode a coleta de novo; se repetir, abra um \"Defeito "
+                "numa ferramenta\" com esta mensagem."
+            )
+        return {
+            "q": quadrado,
+            "t": temas(linha["tema"]),
+            "e": estados((linha["status"], linha["situacao"], linha["tipo_situacao"])),
+            "p": prazos(linha["prazo"]),
+            "o": orgaos(linha["orgao"]),
+            "n": int(linha["chamados"]),
+            "f": int(linha["fechados"]),
+        }
+
+    meses, primeiro, ultimo = [], None, None
+    mes, fatia = None, None
+    for linha in resultados["filtros_por_dia"]:
+        dia = _como_data(linha["dia"])
+        if (dia.year, dia.month) != mes:
+            if fatia is not None:
+                fatia.gravar(pasta / f"{mes[0]:04d}-{mes[1]:02d}{EXTENSAO_DAS_FATIAS}")
+            mes, fatia = (dia.year, dia.month), Fatia(com_dia=True)
+            meses.append(f"{dia.year:04d}-{dia.month:02d}")
+            if dia.month == 1 or len(meses) == 1:
+                avisar(f"Gravando as fatias de {dia.year}...")
+        fatia.somar({**valores(linha), "d": dia.day})
+        primeiro, ultimo = primeiro or dia, dia  # a consulta vem em ordem de dia
+    if fatia is not None:
+        fatia.gravar(pasta / f"{mes[0]:04d}-{mes[1]:02d}{EXTENSAO_DAS_FATIAS}")
+
+    anos, ano, fatia = [], None, None
+    for linha in resultados["filtros_por_ano"]:
+        if int(linha["ano"]) != ano:
+            if fatia is not None:
+                fatia.gravar(pasta / f"{ano:04d}{EXTENSAO_DAS_FATIAS}")
+            ano, fatia = int(linha["ano"]), Fatia(com_dia=False)
+            anos.append(ano)
+        fatia.somar(valores(linha))
+    if fatia is not None:
+        fatia.gravar(pasta / f"{ano:04d}{EXTENSAO_DAS_FATIAS}")
+
+    tudo = Fatia(com_dia=False)
+    for linha in resultados["filtros_tudo"]:
+        tudo.somar(valores(linha))
+    tudo.gravar(pasta / f"tudo{EXTENSAO_DAS_FATIAS}")
+
+    bairros = {
+        linha["bairro"]: [round(float(linha[lado]), CASAS_DO_GEOJSON)
+                          for lado in ("sul", "oeste", "norte", "leste")]
+        for linha in sorted(resultados["caixas_dos_bairros"], key=lambda linha: linha["bairro"])
+    }
+    indice = {
+        "formato": FORMATO_DAS_FATIAS,
+        "quadrados": list(posicao_do_quadrado),
+        "temas": temas.valores(),
+        "estados": [list(estado) for estado in estados.valores()],
+        "prazos": prazos.valores(),
+        "orgaos": orgaos.valores(),
+        "meses": meses,
+        "anos": anos,
+        "primeiro_dia": primeiro.isoformat() if primeiro else None,
+        "ultimo_dia": ultimo.isoformat() if ultimo else None,
+        "bairros": bairros,
+    }
+    (pasta / f"indice{EXTENSAO_DAS_FATIAS}").write_text(json.dumps(indice, ensure_ascii=False, separators=(",", ":")),
+                                       encoding="utf-8")
 
 
 # ---- Login --------------------------------------------------------------------------
@@ -701,12 +924,10 @@ FALTA = {
         "informe o projeto do Google Cloud que roda a consulta (o do sandbox gratuito), "
         "por exemplo --projeto meu-projeto.",
     ),
-    "minimo": FALTA_NO_AGREGADOR["minimo"],
 }
 
 EXEMPLO = {
     "--projeto": "--projeto meu-projeto",
-    "--minimo": "--minimo 5",
     "--saida": "--saida dados/coleta",
     "--limite-gb": f"--limite-gb {LIMITE_GB_PADRAO}",
     "--classificacao": "--classificacao _referencias/minha_lista.csv",
@@ -729,7 +950,7 @@ def _ler_limite(texto):
 def _leitor_de_opcoes():
     leitor = LeitorDeOpcoes(
         prog="coleta.py",
-        usage="%(prog)s --projeto ID --minimo N [--saida PASTA] [--limite-gb GB] "
+        usage="%(prog)s --projeto ID [--saida PASTA] [--limite-gb GB] "
               "[--classificacao ARQUIVO]",
         description="Soma no BigQuery os chamados do 1746 por rua e por quadrado de 100 m.",
         formatter_class=Formatador,
@@ -740,10 +961,7 @@ def _leitor_de_opcoes():
     opcoes = leitor.add_argument_group("opções")
     opcoes.add_argument("--projeto", metavar="ID",
                         help="projeto do Google Cloud que roda a consulta (sandbox gratuito)")
-    opcoes.add_argument(
-        "--minimo", type=ler_minimo, metavar="N",
-        help="rua ou quadrado com menos chamados que N sai como \"menos de N\"",
-    )
+    opcao_do_minimo_que_saiu(opcoes)
     opcoes.add_argument("--saida", metavar="PASTA",
                         help="pasta onde gravar os arquivos (padrão: dados/coleta)")
     opcoes.add_argument(
@@ -792,7 +1010,7 @@ def main(argv=None, *, abrir=None, dialeto=BIGQUERY):
         )
         return 1
     try:
-        resumo = coletar(cliente, saida, minimo=opcoes.minimo, classificacao=classificacao,
+        resumo = coletar(cliente, saida, classificacao=classificacao,
                          limite_gb=opcoes.limite_gb, dialeto=dialeto)
     except erros_do_google.GoogleAPIError as erro:
         print(

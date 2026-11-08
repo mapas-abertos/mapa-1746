@@ -46,16 +46,16 @@ Ajustes porque o repositório é público (ver `decisoes.md`).
 - [x] Regras de dado público, neutralidade e logs públicos no `CLAUDE.md` e no `_referencias/LEIA-ME.md` — _resp.: Guilherme, 04/11/2026_
 - [x] `LICENSE` MIT (titular: Guilherme Lobo de Carvalho) e seção "Fonte dos dados" no `README.md` — _resp.: Guilherme, 04/11/2026_
 - [ ] Conferir no Data.Rio a licença dos dados do 1746 e trocar o "a definir" do `README.md` — _resp.: Guilherme_
-- [ ] Consulta jurídica (licença dos dados, risco de identificar pessoas, texto da página de método, valor do mínimo). Desde 05/11/2026 não trava mais a publicação: o site já está no ar (issue #22) — _resp.: Guilherme_
+- [ ] Consulta jurídica (licença dos dados, risco de identificar pessoas, texto da página de método). Desde 05/11/2026 não trava mais a publicação: o site já está no ar (issue #22) — _resp.: Guilherme_
 - [ ] Credencial do BigQuery, só leitura: criar num environment restrito à `main` (Settings › Environments), nunca num Secret solto, quando a primeira ferramenta de coleta precisar. Nenhuma credencial criada até agora — _resp.: Guilherme_
 
 ### 2. Ferramentas
 
 A ordem da lista é a prioridade: o de cima é o próximo. O gestor mantém.
 
-- [x] Agregador: totais por rua e por quadrado de 100 m — issue #7, PR #8 (05/11/2026). O valor do mínimo fica a definir até a consulta jurídica — _resp.: Guilherme_
+- [x] Agregador: totais por rua e por quadrado de 100 m — issue #7, PR #8 (05/11/2026). O mínimo de chamados saiu em 07/11/2026 (issue #31, ver `decisoes.md`) — _resp.: Guilherme_
 - [x] Mapa v1: quadrados coloridos, tabelas para baixar e página de método — issue #16, PR #19 (05/11/2026). Publicado no GitHub Pages pela issue #22 — _resp.: Guilherme_
-- [ ] Filtros no mapa (período por dia, tema, status, situação, tipo de situação, prazo, órgão, bairro) e fim do mínimo de 5 chamados — issue #31 — _resp.: Guilherme_
+- [ ] Filtros no mapa (período por dia, tema, status, situação, tipo de situação, prazo, órgão e busca de bairro), sem o mínimo de chamados e com o número da versão na tela — issue #31; código e testes no pull request, falta a revisão do gestor, o teste manual (rodar a coleta de novo com o login do Guilherme, medir o tamanho da pasta `filtros/` e pôr a pasta no `coleta.zip`) e republicar o site — _resp.: Guilherme_
 - [x] Regra de escopo (responder só o que foi pedido) no `CLAUDE.md` e na skill `abrir-pedido` — issue #32, falta o gestor abrir a mesma regra no modelo P3 depois do merge — _resp.: Guilherme_
 - [ ] Mapa só com chamados de problema público, por privacidade — issue #26; código e testes no pull request, falta a revisão do gestor, o teste manual (rodar a coleta de novo com o login do Guilherme) e republicar o site — _resp.: Guilherme_
 - [ ] Coleta: somar no BigQuery todos os chamados por rua e quadrado — issue #15; código e testes no pull request, falta a revisão do gestor e o teste manual com o login do Guilherme. Rodar pelo Actions fica para outra issue — _resp.: Guilherme_

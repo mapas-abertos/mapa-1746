@@ -66,11 +66,11 @@ PARA_METROS = Transformer.from_crs("EPSG:4326", "EPSG:31983", always_xy=True)
 # ---- Ajudantes ------------------------------------------------------------------------
 
 
-def rodar(tmp_path, texto=LISTA_EXEMPLO, minimo=5, **opcoes):
+def rodar(tmp_path, texto=LISTA_EXEMPLO, **opcoes):
     entrada = tmp_path / "chamados.csv"
     entrada.write_text(texto, encoding="utf-8")
     saida = tmp_path / "saida"
-    resumo = agregar(entrada, saida, minimo=minimo, **opcoes)
+    resumo = agregar(entrada, saida, **opcoes)
     return resumo, saida
 
 
@@ -116,7 +116,7 @@ def dentro_do_poligono(ponto, anel):
 
 
 def test_exemplo_da_issue_da_a_linha_esperada_em_ruas_csv(tmp_path):
-    resumo, saida = rodar(tmp_path, EXEMPLO_DA_ISSUE, minimo=1)
+    resumo, saida = rodar(tmp_path, EXEMPLO_DA_ISSUE)
     linhas = (saida / "ruas.csv").read_text(encoding="utf-8").splitlines()
     assert linhas == [";".join(CABECALHO_RUAS), "Centro;Rua Exemplo;2;1;1;3.0"]
     assert resumo.sem_rua == 1
@@ -152,7 +152,7 @@ def test_rua_sem_chamado_fechado_fica_sem_mediana(tmp_path):
     texto = LISTA_EXEMPLO.splitlines()[0] + "\n" + (
         "2025-03-05 08:00;;Limpeza;Remoção de entulho;Não consta;Centro;Rua D;;\n"
     )
-    _, saida = rodar(tmp_path, texto, minimo=1)
+    _, saida = rodar(tmp_path, texto)
     linha = por_rua(saida)[("Centro", "Rua D")]
     assert linha["fechados"] == "0"
     assert linha["mediana_dias_ate_fechar"] == ""
@@ -162,7 +162,7 @@ def test_rua_sem_chamado_fechado_fica_sem_mediana(tmp_path):
 
 
 def test_cada_chamado_com_coordenada_cai_em_exatamente_um_quadrado(tmp_path):
-    _, saida = rodar(tmp_path, minimo=1)
+    _, saida = rodar(tmp_path)
     aneis = [f["geometry"]["coordinates"][0] for f in ler_geojson(saida)["features"]]
     for ponto in coordenadas_dos_chamados(LISTA_EXEMPLO):
         quantos = sum(dentro_do_poligono(ponto, anel) for anel in aneis)
@@ -170,7 +170,7 @@ def test_cada_chamado_com_coordenada_cai_em_exatamente_um_quadrado(tmp_path):
 
 
 def test_quadrados_tem_100_m_de_lado_e_cantos_em_multiplos_de_100_m(tmp_path):
-    _, saida = rodar(tmp_path, minimo=1)
+    _, saida = rodar(tmp_path)
     for feature in ler_geojson(saida)["features"]:
         anel = feature["geometry"]["coordinates"][0]
         assert len(anel) == 5 and anel[0] == anel[-1], "o contorno do quadrado tem de fechar"
@@ -184,7 +184,7 @@ def test_quadrados_tem_100_m_de_lado_e_cantos_em_multiplos_de_100_m(tmp_path):
 
 
 def test_quadrado_e_identificado_pelo_canto_sudoeste_em_metros(tmp_path):
-    _, saida = rodar(tmp_path, minimo=1)
+    _, saida = rodar(tmp_path)
     quadrados = {linha["quadrado"] for linha in ler_csv(saida / "quadrados.csv")}
     assert quadrados == {"687300_7465600", "687400_7465600", "680000_7464000"}
 
@@ -192,14 +192,14 @@ def test_quadrado_e_identificado_pelo_canto_sudoeste_em_metros(tmp_path):
 def test_dois_chamados_a_poucos_metros_no_mesmo_quadrado_somam_juntos(tmp_path):
     # As duas primeiras linhas do exemplo estão a uns 4 m uma da outra.
     linhas = LISTA_EXEMPLO.splitlines()
-    _, saida = rodar(tmp_path, "\n".join(linhas[:3]) + "\n", minimo=1)
+    _, saida = rodar(tmp_path, "\n".join(linhas[:3]) + "\n")
     quadrados = ler_csv(saida / "quadrados.csv")
     assert len(quadrados) == 1
     assert quadrados[0]["chamados"] == "2"
 
 
 def test_total_dos_quadrados_e_o_numero_de_chamados_com_coordenada(tmp_path):
-    resumo, saida = rodar(tmp_path, minimo=1)
+    resumo, saida = rodar(tmp_path)
     total = sum(int(linha["chamados"]) for linha in ler_csv(saida / "quadrados.csv"))
     assert total == len(coordenadas_dos_chamados(LISTA_EXEMPLO)) == 15
     assert total == resumo.contados - resumo.sem_coordenada
@@ -249,21 +249,21 @@ def test_quadrado_com_numeros_certos(tmp_path):
 
 
 def test_chamado_sem_rua_nao_entra_em_nenhuma_rua(tmp_path):
-    resumo, saida = rodar(tmp_path, minimo=1)
+    resumo, saida = rodar(tmp_path)
     ruas = {linha["rua"] for linha in ler_csv(saida / "ruas.csv")}
     assert ruas == {"Rua A", "Rua B", "Rua C"}
     assert resumo.sem_rua == 2  # uma com rua "0", outra com rua vazia
 
 
 def test_chamado_sem_rua_mas_com_coordenada_conta_no_quadrado(tmp_path):
-    _, saida = rodar(tmp_path, minimo=1)
+    _, saida = rodar(tmp_path)
     do_csv = {linha["quadrado"]: linha for linha in ler_csv(saida / "quadrados.csv")}
     # Q2: 2 chamados da Rua B e 2 sem rua.
     assert do_csv["687400_7465600"]["chamados"] == "4"
 
 
 def test_chamado_sem_coordenada_nao_entra_em_nenhum_quadrado(tmp_path):
-    resumo, _ = rodar(tmp_path, minimo=1)
+    resumo, _ = rodar(tmp_path)
     # Latitude e longitude vazias (2), as duas 0 (1) e só a longitude 0 (1).
     assert resumo.sem_coordenada == 4
 
@@ -275,41 +275,47 @@ def test_resumo_mostra_sem_rua_e_sem_coordenada(tmp_path):
     assert "sem coordenada: 4" in texto
 
 
-# ---- Mínimo configurável --------------------------------------------------------------
+# ---- Sem mínimo de chamados (issue #31) ----------------------------------------------
+
+MENSAGEM_DO_MINIMO = "A opção --minimo saiu (ver decisoes.md). Rode sem ela."
 
 
-def test_rua_abaixo_do_minimo_sai_como_menos_de_n_sem_numero(tmp_path):
-    _, saida = rodar(tmp_path, minimo=5)
+def test_rua_com_1_chamado_mostra_o_numero(tmp_path):
+    # Glória, Rua C: um chamado só, sem coordenada e ainda aberto.
+    _, saida = rodar(tmp_path)
     linha = por_rua(saida)[("Glória", "Rua C")]
-    assert linha["chamados"] == "menos de 5"
-    assert linha["atendidos"] == linha["fechados"] == linha["mediana_dias_ate_fechar"] == ""
+    assert linha["chamados"] == "1"
+    assert linha["atendidos"] == linha["fechados"] == "0"
+    assert linha["mediana_dias_ate_fechar"] == ""
 
 
-def test_rua_com_exatamente_o_minimo_mostra_o_numero(tmp_path):
-    _, saida = rodar(tmp_path, minimo=5)
-    assert por_rua(saida)[("Tijuca", "Rua A")]["chamados"] == "5"
+def test_quadrado_com_1_chamado_mostra_1_e_nao_menos_de_n(tmp_path):
+    linhas = LISTA_EXEMPLO.splitlines()
+    _, saida = rodar(tmp_path, "\n".join([linhas[0], linhas[9]]) + "\n")
+    (linha,) = ler_csv(saida / "quadrados.csv")
+    assert linha["chamados"] == "1"
+    (feature,) = ler_geojson(saida)["features"]
+    assert feature["properties"]["chamados"] == 1
+    for arquivo in saida.iterdir():
+        assert "menos de" not in arquivo.read_text(encoding="utf-8"), arquivo.name
 
 
-def test_quadrado_abaixo_do_minimo_sai_como_menos_de_n_sem_numero(tmp_path):
-    _, saida = rodar(tmp_path, minimo=5)
-    linha = {q["quadrado"]: q for q in ler_csv(saida / "quadrados.csv")}["687400_7465600"]
-    assert linha["chamados"] == "menos de 5"
-    assert linha["atendidos"] == linha["fechados"] == linha["mediana_dias_ate_fechar"] == ""
-    propriedades = {
-        f["properties"]["quadrado"]: f["properties"] for f in ler_geojson(saida)["features"]
-    }["687400_7465600"]
-    assert propriedades["chamados"] == "menos de 5"
-    assert propriedades["atendidos"] is None and propriedades["fechados"] is None
+def test_resumo_nao_fala_mais_em_minimo(tmp_path):
+    _, saida = rodar(tmp_path)
+    assert "mínimo" not in (saida / "resumo.txt").read_text(encoding="utf-8")
 
 
-def test_minimo_muda_o_corte(tmp_path):
-    _, saida = rodar(tmp_path, minimo=7)
-    assert por_rua(saida)[("Centro", "Rua A")]["chamados"] == "menos de 7"
+def test_linha_de_comando_com_minimo_para_e_diz_que_a_opcao_saiu(tmp_path, capsys):
+    codigo, mensagem = rodar_comando(tmp_path, capsys, "--minimo", "5")
+    assert codigo != 0
+    assert MENSAGEM_DO_MINIMO in mensagem
+    assert not (tmp_path / "saida").exists(), "a ferramenta tinha de parar sem gravar nada"
 
 
-def test_minimo_tem_de_ser_pelo_menos_1(tmp_path):
-    with pytest.raises(ValueError, match="mínimo"):
-        rodar(tmp_path, minimo=0)
+def test_linha_de_comando_com_minimo_sem_valor_tambem_para(tmp_path, capsys):
+    codigo, mensagem = rodar_comando(tmp_path, capsys, "--minimo")
+    assert codigo != 0
+    assert MENSAGEM_DO_MINIMO in mensagem
 
 
 # ---- Nenhuma saída tem coordenada, identificador ou número de porta -------------------
@@ -324,7 +330,7 @@ def test_nenhuma_saida_tem_coordenada_identificador_ou_numero_de_porta(tmp_path)
         f"{linha};{identificador};{porta}\n"
         for linha, identificador, porta in zip(linhas[1:], identificadores, portas)
     )
-    _, saida = rodar(tmp_path, texto, minimo=1)
+    _, saida = rodar(tmp_path, texto)
 
     pontos = coordenadas_dos_chamados(LISTA_EXEMPLO)
     textos_proibidos = set(identificadores) | set(portas)
@@ -380,14 +386,14 @@ def test_entrada_sem_duas_colunas_diz_as_duas(tmp_path):
 def test_linha_de_comando_avisa_a_coluna_que_falta(tmp_path, capsys):
     entrada = tmp_path / "chamados.csv"
     entrada.write_text(_sem_coluna(LISTA_EXEMPLO, "bairro"), encoding="utf-8")
-    codigo = main([str(entrada), "--saida", str(tmp_path / "saida"), "--minimo", "5"])
+    codigo = main([str(entrada), "--saida", str(tmp_path / "saida")])
     assert codigo != 0
     assert "bairro" in capsys.readouterr().err
 
 
 def test_entrada_separada_por_virgula_tambem_funciona(tmp_path):
     texto = EXEMPLO_DA_ISSUE.replace(";", ",")
-    _, saida = rodar(tmp_path, texto, minimo=1)
+    _, saida = rodar(tmp_path, texto)
     assert por_rua(saida)[("Centro", "Rua Exemplo")]["chamados"] == "2"
 
 
@@ -396,7 +402,7 @@ def test_entrada_separada_por_virgula_tambem_funciona(tmp_path):
 
 def test_periodo_deixa_de_fora_o_chamado_fora_das_datas(tmp_path):
     # Só os chamados da Tijuca abertos de 02/05 a 05/05/2025, contando os dois dias.
-    resumo, saida = rodar(tmp_path, minimo=1, inicio=date(2025, 5, 2), fim=date(2025, 5, 5))
+    resumo, saida = rodar(tmp_path, inicio=date(2025, 5, 2), fim=date(2025, 5, 5))
     ruas = ler_csv(saida / "ruas.csv")
     assert [(r["bairro"], r["rua"], r["chamados"]) for r in ruas] == [("Tijuca", "Rua A", "4")]
     assert resumo.fora_do_periodo == 15
@@ -408,8 +414,7 @@ def test_periodo_pela_linha_de_comando(tmp_path, capsys):
     entrada.write_text(LISTA_EXEMPLO, encoding="utf-8")
     saida = tmp_path / "saida"
     codigo = main([
-        str(entrada), "--saida", str(saida), "--minimo", "1",
-        "--inicio", "2025-05-01", "--fim", "2025-05-31",
+        str(entrada), "--saida", str(saida), "--inicio", "2025-05-01", "--fim", "2025-05-31",
     ])
     assert codigo == 0
     assert por_rua(saida).keys() == {("Tijuca", "Rua A")}
@@ -421,7 +426,7 @@ def test_linha_de_comando_sem_periodo_conta_tudo(tmp_path):
     entrada = tmp_path / "chamados.csv"
     entrada.write_text(LISTA_EXEMPLO, encoding="utf-8")
     saida = tmp_path / "saida"
-    assert main([str(entrada), "--saida", str(saida), "--minimo", "5"]) == 0
+    assert main([str(entrada), "--saida", str(saida)]) == 0
     assert len(por_rua(saida)) == 4
 
 
@@ -452,72 +457,58 @@ def confere_mensagem(codigo, mensagem, *trechos):
         assert ingles not in mensagem.lower(), f"mensagem em inglês: {mensagem}"
 
 
-def test_sem_minimo_diz_em_portugues_o_que_fazer(tmp_path, capsys):
+def test_sem_minimo_roda(tmp_path, capsys):
     codigo, mensagem = rodar_comando(tmp_path, capsys)
-    confere_mensagem(codigo, mensagem, "Falta o --minimo", "--minimo 5")
+    assert codigo == 0, mensagem
+    assert (tmp_path / "saida" / "ruas.csv").is_file()
 
 
 def test_sem_saida_diz_em_portugues_o_que_fazer(tmp_path, capsys):
-    codigo, mensagem = rodar_comando(tmp_path, capsys, "--minimo", "5", com_saida=False)
+    codigo, mensagem = rodar_comando(tmp_path, capsys, com_saida=False)
     confere_mensagem(codigo, mensagem, "Falta a --saida")
 
 
 def test_sem_arquivo_de_entrada_diz_em_portugues_o_que_fazer(tmp_path, capsys):
-    codigo, mensagem = rodar_comando(tmp_path, capsys, "--minimo", "5", com_entrada=False)
+    codigo, mensagem = rodar_comando(tmp_path, capsys, com_entrada=False)
     confere_mensagem(codigo, mensagem, "Falta o arquivo de entrada")
 
 
 def test_sem_nada_lista_tudo_o_que_falta(tmp_path, capsys):
     codigo, mensagem = rodar_comando(tmp_path, capsys, com_entrada=False, com_saida=False)
-    confere_mensagem(codigo, mensagem, "arquivo de entrada", "--saida", "--minimo")
-
-
-def test_minimo_que_nao_e_numero_diz_em_portugues_o_que_fazer(tmp_path, capsys):
-    codigo, mensagem = rodar_comando(tmp_path, capsys, "--minimo", "cinco")
-    confere_mensagem(codigo, mensagem, "--minimo", "número inteiro")
-
-
-def test_minimo_menor_que_1_diz_em_portugues_o_que_fazer(tmp_path, capsys):
-    codigo, mensagem = rodar_comando(tmp_path, capsys, "--minimo", "0")
-    confere_mensagem(codigo, mensagem, "--minimo", "1 ou mais")
-
-
-def test_minimo_sem_valor_diz_em_portugues_o_que_fazer(tmp_path, capsys):
-    codigo, mensagem = rodar_comando(tmp_path, capsys, "--minimo")
-    confere_mensagem(codigo, mensagem, "--minimo")
+    confere_mensagem(codigo, mensagem, "arquivo de entrada", "--saida")
 
 
 def test_data_inicial_invalida_diz_em_portugues_o_que_fazer(tmp_path, capsys):
-    codigo, mensagem = rodar_comando(tmp_path, capsys, "--minimo", "5", "--inicio", "01/05/2025")
+    codigo, mensagem = rodar_comando(tmp_path, capsys, "--inicio", "01/05/2025")
     confere_mensagem(codigo, mensagem, "--inicio", "AAAA-MM-DD")
 
 
 def test_data_final_invalida_diz_em_portugues_o_que_fazer(tmp_path, capsys):
-    codigo, mensagem = rodar_comando(tmp_path, capsys, "--minimo", "5", "--fim", "2025-13-40")
+    codigo, mensagem = rodar_comando(tmp_path, capsys, "--fim", "2025-13-40")
     confere_mensagem(codigo, mensagem, "--fim", "AAAA-MM-DD")
 
 
 def test_periodo_ao_contrario_diz_em_portugues_o_que_fazer(tmp_path, capsys):
     codigo, mensagem = rodar_comando(
-        tmp_path, capsys, "--minimo", "5", "--inicio", "2025-05-31", "--fim", "2025-05-01"
+        tmp_path, capsys, "--inicio", "2025-05-31", "--fim", "2025-05-01"
     )
     confere_mensagem(codigo, mensagem, "--fim")
 
 
 def test_opcao_desconhecida_diz_em_portugues_o_que_fazer(tmp_path, capsys):
-    codigo, mensagem = rodar_comando(tmp_path, capsys, "--minimo", "5", "--cor", "azul")
+    codigo, mensagem = rodar_comando(tmp_path, capsys, "--cor", "azul")
     confere_mensagem(codigo, mensagem, "--cor")
 
 
 def test_arquivo_que_nao_existe_diz_em_portugues_o_que_fazer(tmp_path, capsys):
-    codigo = main([str(tmp_path / "nao_existe.csv"), "--saida", str(tmp_path / "s"), "--minimo", "5"])
+    codigo = main([str(tmp_path / "nao_existe.csv"), "--saida", str(tmp_path / "s")])
     confere_mensagem(codigo, capsys.readouterr().err, "nao_existe.csv")
 
 
 def test_arquivo_que_nao_esta_em_utf8_diz_em_portugues_o_que_fazer(tmp_path, capsys):
     entrada = tmp_path / "chamados.csv"
     entrada.write_bytes(LISTA_EXEMPLO.encode("latin-1"))
-    codigo = main([str(entrada), "--saida", str(tmp_path / "s"), "--minimo", "5"])
+    codigo = main([str(entrada), "--saida", str(tmp_path / "s")])
     confere_mensagem(codigo, capsys.readouterr().err, "UTF-8")
 
 
@@ -526,7 +517,8 @@ def test_ajuda_em_portugues(capsys):
         main(["--ajuda"])
     assert saida.value.code == 0
     ajuda = capsys.readouterr().out
-    assert "uso:" in ajuda and "--minimo" in ajuda and "--ajuda" in ajuda
+    assert "uso:" in ajuda and "--ajuda" in ajuda
+    assert "--minimo" not in ajuda
     for ingles in INGLES:
         assert ingles not in ajuda.lower(), f"ajuda em inglês: {ingles}"
 

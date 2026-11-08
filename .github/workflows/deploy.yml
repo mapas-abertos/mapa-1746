@@ -68,7 +68,9 @@ jobs:
           echo "Dados: $DADOS" | tee -a "$GITHUB_STEP_SUMMARY"
 
       - name: Montar o site
-        run: python src/montar_site.py entrada --saida _site
+        env:
+          VERSAO: ${{ inputs.versao }}
+        run: python src/montar_site.py entrada --saida _site --versao "$VERSAO"
 
       - uses: actions/configure-pages@v5
 
