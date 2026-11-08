@@ -6,6 +6,7 @@
 
 ## 2026-11-07
 
+- Linha 20 do Backlog: a regra de escopo da issue #32 subiu ao modelo P3 como guilobocarvalho/mentoria-p3-modelo#23. O sub chat da #32 foi arquivado depois do merge.
 - Abertas a issue #31 (filtros no mapa, período por dia e fim do mínimo de 5 chamados) e a issue #32 (regra de escopo nas respostas), pela skill `abrir-pedido`. As duas entraram no topo da fila do checklist.
 - Issue #32: regra de escopo no `CLAUDE.md` (Regras) e no passo 1 da skill `abrir-pedido`: responder só o que foi pedido, a partir dos dados e das colunas que já existem; sugestão fora do escopo vai numa pergunta separada, marcada "fora do pedido". Veio de um pedido de filtros em que sugestões de colorir o mapa se misturaram às opções.
 
