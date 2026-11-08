@@ -22,6 +22,7 @@ Este arquivo é lido em **toda sessão**. Só entra aqui o que toda sessão prec
 
 - Ler `memory.md` antes de qualquer tarefa. Para achar um arquivo, `map.md`.
 - Não inventar dados: o que não foi confirmado fica "a definir".
+- Responder só o que foi pedido, partindo dos dados e das colunas que já existem. Sugestão fora do escopo vai numa pergunta separada, marcada "fora do pedido", e nunca misturada nas opções.
 - Marcar `[x]` no checklist ao resolver um item e anotar decisão e responsável na linha.
 - Ideia de melhoria vai para `Backlog_Melhorias.md`. Não implementar sem aprovação. O que seria melhor no próprio modelo (CI, regras, guias), e não neste projeto, entra lá com a origem "modelo P3": o mentor leva de volta ao modelo.
 - Idioma: português (Brasil). Respostas diretas e concisas, sem jargão: o responsável não precisa saber programar.
